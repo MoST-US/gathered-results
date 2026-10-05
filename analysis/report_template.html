@@ -1,0 +1,578 @@
+<title>Mix Capacity Additivity</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+/* Layout: one reading column (~72ch) with figures allowed to run to 980px; findings first, method last. */
+:root {
+  --bg: #f6f7f8; --surface: #fdfdfc; --ink: #111418; --ink-2: #4b5058; --muted: #858a92;
+  --grid: #e2e4e7; --axis: #c2c6cc; --line: rgba(17,20,24,.10); --accent: #3b3592;
+  --band: rgba(59,53,146,.08); --band-2: rgba(59,53,146,.16);
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+  --good: #0a7d0a; --warn-ink: #9a5b00;
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111316; --surface: #181a1e; --ink: #f2f3f5; --ink-2: #c1c5cc; --muted: #8b9098;
+  --grid: #2a2d32; --axis: #3c4047; --line: rgba(255,255,255,.10); --accent: #a9a3f5;
+  --band: rgba(169,163,245,.10); --band-2: rgba(169,163,245,.20);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --good: #3cc23c; --warn-ink: #e3a440; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #111316; --surface: #181a1e; --ink: #f2f3f5; --ink-2: #c1c5cc; --muted: #8b9098;
+  --grid: #2a2d32; --axis: #3c4047; --line: rgba(255,255,255,.10); --accent: #a9a3f5;
+  --band: rgba(169,163,245,.10); --band-2: rgba(169,163,245,.20);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --good: #3cc23c; --warn-ink: #e3a440; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 15.5px/1.6 var(--f-body); }
+.wrap { max-width: 980px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 80px; }
+.prose { max-width: 72ch; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; letter-spacing: -.005em; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 2.9rem); line-height: 1.05; font-weight: 600; }
+h2 { font-size: 1.55rem; font-weight: 600; line-height: 1.2; }
+h3 { font-size: 1.12rem; font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font: 500 .74rem/1.2 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.lede { font-size: 1.12rem; color: var(--ink-2); }
+header { display: grid; gap: 14px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font: 400 .82rem/1.4 var(--f-mono); color: var(--muted); }
+section { display: grid; gap: 16px; padding-block: 36px 8px; }
+.sec-head { display: grid; gap: 6px; }
+code, .mono { font-family: var(--f-mono); font-size: .9em; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* verdict list */
+.verdicts { display: grid; gap: 0; border-top: 1px solid var(--line); }
+.verdict { display: grid; grid-template-columns: 9.5rem 1fr; gap: 6px 22px; padding-block: 16px; border-bottom: 1px solid var(--line); }
+.verdict .tag { font: 600 .78rem/1.3 var(--f-mono); letter-spacing: .04em; text-transform: uppercase; padding-top: 3px; }
+.verdict .tag.yes { color: var(--good); } .verdict .tag.part { color: var(--warn-ink); } .verdict .tag.no { color: var(--muted); }
+.verdict h3 { margin-bottom: 4px; }
+.verdict p { color: var(--ink-2); }
+@media (max-width: 600px) { .verdict { grid-template-columns: 1fr; } }
+
+/* stat strip */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.stat { background: var(--surface); padding: 14px 16px; display: grid; gap: 2px; align-content: start; }
+.stat b { font: 600 1.6rem/1.15 var(--f-display); }
+.stat span { font-size: .84rem; color: var(--ink-2); }
+
+/* figures */
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 18px 18px 14px; display: grid; gap: 12px; min-width: 0; }
+figcaption { font-size: .88rem; color: var(--ink-2); max-width: 80ch; }
+figcaption b { color: var(--ink); font-weight: 600; }
+.fig-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px 20px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .82rem; color: var(--ink-2); align-items: center; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.legend i.sq { border-radius: 2px; background: transparent !important; border: 2px solid var(--ink-2); }
+.legend i.ci { border-radius: 50%; background: var(--ink-2); }
+.chart { width: 100%; min-width: 0; position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { font: 500 .8rem/1 var(--f-body); color: var(--ink-2); background: transparent; border: 0; padding: 8px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--band-2); color: var(--ink); }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+
+.tip { position: fixed; pointer-events: none; z-index: 10; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: .8rem; line-height: 1.45; box-shadow: 0 6px 20px rgba(0,0,0,.12); max-width: 320px; }
+.tip .t { font-weight: 600; margin-bottom: 2px; }
+.tip .k { color: var(--muted); }
+
+/* tables */
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .84rem; }
+th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; font-variant-numeric: tabular-nums; }
+th { font-weight: 600; color: var(--ink-2); background: var(--bg); position: sticky; top: 0; }
+th:first-child, td:first-child { text-align: left; }
+td.lbl { text-align: left; white-space: normal; min-width: 260px; font-family: var(--f-mono); font-size: .76rem; }
+tr:last-child td { border-bottom: 0; }
+details { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+details > summary { cursor: pointer; padding: 12px 16px; font-weight: 500; }
+details[open] > summary { border-bottom: 1px solid var(--line); }
+details .tbl { border: 0; border-radius: 0; max-height: 520px; overflow: auto; }
+ul.tight { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; color: var(--ink-2); }
+.formula { font-family: var(--f-mono); font-size: .9rem; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; white-space: pre; }
+.note { font-size: .86rem; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">MoST capacity study · A40 · 1 GPU · vLLM-style serving</div>
+  <h1>Is serving capacity additive across request mixes?</h1>
+  <p class="lede prose" id="lede"></p>
+  <div class="meta" id="meta"></div>
+</header>
+
+<section>
+  <div class="sec-head"><div class="eyebrow">Verdict</div><h2>What the data say</h2></div>
+  <div class="verdicts" id="verdicts"></div>
+  <div class="stats" id="stats"></div>
+</section>
+
+<section>
+  <div class="sec-head prose">
+    <div class="eyebrow">Figure 1</div>
+    <h2>Pure-cell capacities predict mix capacity, if you combine them harmonically</h2>
+    <p>Each point is one mix run. The horizontal axis is the capacity predicted from the capacities of its pure components; the vertical axis is the capacity the binary search measured for the mix. Switch the combination law to see which one puts the points on the diagonal.</p>
+  </div>
+  <figure>
+    <div class="fig-top">
+      <div class="seg" role="group" aria-label="Combination law">
+        <button id="law-H" aria-pressed="true">Harmonic (q = −1)</button>
+        <button id="law-G" aria-pressed="false">Geometric (q = 0)</button>
+        <button id="law-A" aria-pressed="false">Arithmetic (q = +1)</button>
+      </div>
+      <div class="legend" id="legend1"></div>
+    </div>
+    <div class="chart" id="fig1"></div>
+    <figcaption id="cap1"></figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="sec-head prose">
+    <div class="eyebrow">Figure 2</div>
+    <h2>The data choose the harmonic law, almost exactly</h2>
+    <p>Treat the combination law as a power mean with free exponent <span class="mono">q</span>, so that <span class="mono">C_mix = (Σ pᵢ Cᵢ^q)^(1/q)</span>. Harmonic is q = −1, geometric q = 0 and arithmetic q = +1. We estimate <span class="mono">q</span> from the mixes.</p>
+  </div>
+  <div class="two">
+    <figure>
+      <div class="chart" id="fig2a"></div>
+      <figcaption id="cap2a"></figcaption>
+    </figure>
+    <figure>
+      <div class="chart" id="fig2b"></div>
+      <figcaption id="cap2b"></figcaption>
+    </figure>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head prose">
+    <div class="eyebrow">Figure 3</div>
+    <h2>How far from exact additivity, per model and test type</h2>
+    <p>Here δ is the systematic multiplicative bias of the mix capacity relative to the harmonic prediction (0 % means exactly additive). The shaded band is the ±10 % region of practical equivalence (ROPE).</p>
+  </div>
+  <figure>
+    <div class="legend">
+      <span><i class="ci" style="background:var(--accent)"></i>Bayesian posterior median, 90 % (thick) and 95 % (thin) credible interval</span>
+      <span><i class="ci" style="background:transparent;border:2px solid var(--muted)"></i>Frequentist mean, 95 % t confidence interval</span>
+    </div>
+    <div class="chart" id="fig3"></div>
+    <figcaption id="cap3"></figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="sec-head prose">
+    <div class="eyebrow">Figure 4</div>
+    <h2>Every mix run, ranked by its departure from additivity</h2>
+    <p>This plot shows each run's posterior deviation from the harmonic prediction, with its 90 % credible interval. The interval includes the uncertainty in both the mix capacity and the component capacities.</p>
+  </div>
+  <figure>
+    <div class="legend" id="legend4"></div>
+    <div class="chart" id="fig4"></div>
+    <figcaption id="cap4"></figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="sec-head prose">
+    <div class="eyebrow">Figure 5</div>
+    <h2>Boundedness: mixes stay inside their component range</h2>
+    <p>Jensen's inequality orders the laws: harmonic ≤ geometric ≤ arithmetic, and all three lie between the smallest and the largest pure capacity. The plot shows where each mix lands inside the harmonic-to-arithmetic envelope: 0 is the harmonic prediction and 1 the arithmetic one.</p>
+  </div>
+  <figure>
+    <div class="legend" id="legend5"></div>
+    <div class="chart" id="fig5"></div>
+    <figcaption id="cap5"></figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="sec-head prose">
+    <div class="eyebrow">Figure 6</div>
+    <h2>Mix deviations are larger than run-to-run noise</h2>
+    <p>This figure compares the scale of three noise sources: re-running the same pure cell on another day (σ<sub>rep</sub>), how sharply the SLA flips from pass to fail (s), and the non-additive residual of each mix around the harmonic law (σ<sub>mix</sub>). When σ<sub>mix</sub> is larger than σ<sub>rep</sub>, the mixes carry a real interaction effect beyond measurement noise.</p>
+  </div>
+  <div class="two">
+    <figure>
+      <div class="chart" id="fig6"></div>
+      <figcaption id="cap6"></figcaption>
+    </figure>
+    <figure>
+      <div class="chart" id="fig7"></div>
+      <figcaption id="cap7"></figcaption>
+    </figure>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head prose"><div class="eyebrow">Inference tables</div><h2>Frequentist tests</h2>
+  <p>These tests use the log-ratio r = log(C<sub>mix</sub> / Ĉ<sub>law</sub>) per mix run. TOST tests equivalence to zero within ±10 %, so a small p means the bias is practically negligible. The random-effects estimate (DerSimonian–Laird) weights each run by its measurement precision and reports the heterogeneity τ and I².</p></div>
+  <div class="seg" role="group" aria-label="Law for tests">
+    <button id="tlaw-H" aria-pressed="true">Harmonic</button>
+    <button id="tlaw-G" aria-pressed="false">Geometric</button>
+    <button id="tlaw-A" aria-pressed="false">Arithmetic</button>
+  </div>
+  <div class="tbl"><table id="ttable"></table></div>
+  <p class="note" id="tnote"></p>
+  <details>
+    <summary>All mix runs (data table)</summary>
+    <div class="tbl"><table id="mtable"></table></div>
+  </details>
+</section>
+
+<section>
+  <div class="sec-head prose"><div class="eyebrow">Method</div><h2>How capacity and additivity were estimated</h2></div>
+  <div class="prose" style="display:grid;gap:14px;color:var(--ink-2)">
+    <p><b style="color:var(--ink)">Data.</b> <span id="m-data"></span></p>
+    <p><b style="color:var(--ink)">Capacity is latent.</b> A run never observes its capacity C directly. It observes pass/fail verdicts of the SLA at the request rates (req/min) chosen by the doubling-then-bisection search, and the verdicts are noisy near the threshold: <span id="m-nonmono"></span> of the pure-cell runs end with a "largest pass" above the "smallest fail". The Bayesian model therefore uses every verdict through a logistic threshold likelihood:</p>
+    <div class="formula">P(pass | r) = logistic( (θ_run − log r) / s_kind )
+pure run :  θ = μ_cell + σ_rep,kind · z           (day-to-day replicate noise)
+mix run  :  θ = log M_q(p, e^μ) + δ_model×kind + σ_mix,kind · z
+            M_q(p, C) = (Σ pᵢ Cᵢ^q)^(1/q)          q = −1 harmonic · 0 geometric · +1 arithmetic
+δ_g = δ₀ + τ_δ · z_g ;  μ ~ N(log 500, 3) ;  σ ~ HalfN(0.3) ;  s ~ LogN(log 0.05, 0.5) ;  q ~ N(0, 2)</div>
+    <p>Pure and mix runs are fitted jointly, so the uncertainty of each component capacity propagates into the prediction it feeds. Proportions pᵢ are the realised request shares of each run, weighted by request counts. We fit four variants with NUTS (4 chains × 1,500 draws after 1,500 tuning steps): harmonic, geometric and arithmetic with q fixed, and a free-q model. <span id="m-diag"></span></p>
+    <p><b style="color:var(--ink)">Comparing laws.</b> Each law is scored by its posterior predictive log density for the pass/fail verdicts of every mix run. The run's own residual is integrated out, so a law cannot hide its misfit in it. The frequentist side uses the final search bracket [largest pass, smallest fail] (geometric midpoint) and replicate-averaged pure capacities. It adds a profile-likelihood interval for q with group offsets profiled out, and a calibration regression log C<sub>obs</sub> = a + b·log Ĉ<sub>H</sub>.</p>
+    <p><b style="color:var(--ink)">Caveats.</b></p>
+    <ul class="tight" id="caveats"></ul>
+  </div>
+</section>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+const R = /*__DATA__*/null;
+const MODELS = ["DeepSeek-R1-Qwen-7B", "Gemma-7B", "Llama-3.1-8B"];
+const SVAR = {"DeepSeek-R1-Qwen-7B": "--s1", "Gemma-7B": "--s2", "Llama-3.1-8B": "--s3"};
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const col = m => css(SVAR[m]);
+const pct = (x, d = 1) => (x >= 0 ? "+" : "−") + Math.abs(100 * (Math.exp(x) - 1)).toFixed(d) + " %";
+const pctr = (x, d = 0) => (100 * x).toFixed(d) + " %";
+const fmtP = p => p == null ? "–" : p < 1e-4 ? "< 0.0001" : p.toFixed(4);
+const fmtN = x => x >= 100 ? Math.round(x).toLocaleString("en-US") : x.toFixed(1);
+const gname = g => g.replace("|", " · ");
+const $ = id => document.getElementById(id);
+
+/* ---------- text ---------- */
+function text() {
+  const M = R.meta, h = R.tests.H.all, q = R.q.bayes, d0 = R.overall.bayes, sh = R.share;
+  $("lede").textContent = `When an LLM server receives a mix of request shapes (short and long prompts, short and long answers), can its maximum sustainable rate be predicted from the capacity of each shape measured alone? Across ${M.mix_runs} mix runs (${M.designs} distinct mixes) on three 7–8 B models, the answer is yes, to within about 10 %, provided the capacities are combined harmonically. Each request type uses up a fixed fraction of the server, and those fractions add.`;
+  $("meta").innerHTML = [`${M.rows.toLocaleString("en-US")} SLA evaluations`, `${M.units} search runs`, `${M.mix_runs} mix runs · ${M.designs} mix designs`, `3 models · MIT (120 s) and MST (1800 s) tests`].map(s => `<span>${s}</span>`).join("");
+  const V = [
+    ["yes", "Additive in load", "Harmonic law: 1/C_mix = Σ pᵢ / Cᵢ",
+      `Free-exponent fit gives q = ${q.med.toFixed(2)} (90 % CrI ${q.lo90.toFixed(2)} to ${q.hi90.toFixed(2)}); frequentist profile ${R.q.prof.q_hat.toFixed(2)} (95 % CI ${R.q.prof.ci[0].toFixed(2)} to ${R.q.prof.ci[1].toFixed(2)}). The harmonic prediction beats the arithmetic one for ${pctr(M.h_better)} of runs (Wilcoxon p ${fmtP(M.hv_a)}). Calibration slope b = ${R.calib.b.toFixed(3)} (95 % CI ${R.calib.b_ci[0].toFixed(3)} to ${R.calib.b_ci[1].toFixed(3)}), R² = ${R.calib.r2.toFixed(3)}.`],
+    ["part", "Small, real bias", `Mixes run ${pct(d0.med)} versus the harmonic law on average`,
+      `Pooled bias δ₀ = ${pct(d0.med)} (90 % CrI ${pct(d0.lo90)} to ${pct(d0.hi90)}), P(|δ₀| < 10 %) = ${pctr(d0.p_rope)}. Frequentist mean ${pct(h.mean)} (95 % CI ${pct(h.ci95[0])} to ${pct(h.ci95[1])}, t-test p ${fmtP(h.p_t)}; TOST ±10 % p ${fmtP(h.p_tost)}). The bias is statistically detectable but practically small, and its sign depends on the model (Figure 3).`],
+    ["yes", "Bounded", "Mix capacity lies between its slowest and fastest component",
+      `${R.bounds.minmax[0]} of ${R.bounds.minmax[1]} runs fall inside [min Cᵢ, max Cᵢ] (Clopper–Pearson 95 % CI ${pctr(R.bounds.minmax[2][0], 1)} to ${pctr(R.bounds.minmax[2][1], 1)}). The two exceptions (both Llama-3.1-8B MST) fall 12 % and 2 % below their slowest component. No run exceeds the arithmetic mean (${R.bounds.above_A} of ${R.bounds.minmax[1]}), so the arithmetic law is a hard upper bound in practice. Posterior share of runs inside [min, max]: ${pctr(sh.minmax.med)}.`],
+    ["part", "Not exact", "Residual interaction beyond measurement noise",
+      `The non-additive residual per mix (σ_mix ≈ ${pct(R.sd.harmonic.mix.MIT.med, 0).replace("+", "")} MIT, ${pct(R.sd.harmonic.mix.MST.med, 0).replace("+", "")} MST) is much larger than day-to-day replicate noise (σ_rep ≈ ${pct(R.sd.harmonic.rep.MIT.med, 1).replace("+", "")}, ${pct(R.sd.harmonic.rep.MST.med, 1).replace("+", "")}). Random-effects I² = ${pctr(h.I2)}. The interaction is small for the short MIT tests but substantial for the 30-minute MST tests, where every credible departure lies. For planning, a 90 % band around the harmonic prediction is about ±${Math.round(100 * (Math.exp(1.645 * Math.hypot(R.sd.harmonic.mix.MIT.med, R.overall.bayes.med)) - 1))} % for MIT and ±${Math.round(100 * (Math.exp(1.645 * Math.hypot(R.sd.harmonic.mix.MST.med, R.overall.bayes.med)) - 1))} % for MST.`],
+  ];
+  $("verdicts").innerHTML = V.map(([c, tag, h3, p]) => `<div class="verdict"><div class="tag ${c}">${tag}</div><div><h3>${h3}</h3><p>${p}</p></div></div>`).join("");
+  const st = [
+    [`q = ${q.med.toFixed(2)}`, "estimated power-mean exponent (harmonic = −1)"],
+    [pct(d0.med), "average mix bias vs harmonic law"],
+    [`${R.bounds.minmax[0]}/${R.bounds.minmax[1]}`, "runs within the component capacity range"],
+    [pctr(sh.rope.med), "of runs within ±10 % of the harmonic law (posterior)"],
+  ];
+  $("stats").innerHTML = st.map(([b, s]) => `<div class="stat"><b class="num">${b}</b><span>${s}</span></div>`).join("");
+
+  $("m-data").textContent = `${M.rows.toLocaleString("en-US")} SLA evaluations from the archive (3 models on one A40 each; MIT = 120 s maximum-inference-throughput runs; MST = 1800 s maximum-sustainable-throughput runs). Pure cells: 20 input×output token-range cells, with 4 replicate searches per cell for MIT and 1–2 for MST. Mixes: ${M.mix_runs} runs of ${M.designs} designs with 2–5 components drawn from 5 cells (1-100_1-100, 1-100_1000-1500, 100-300_300-600, 600-1000_1-100, 600-1000_1000-1500). Two design families appear: equal-count (50/50) mixes and load-balanced mixes, where pᵢ ∝ Cᵢ so every type takes the same share of the server.`;
+  $("m-nonmono").textContent = `${M.non_monotone}`;
+  const dg = R.diag;
+  $("m-diag").textContent = `Convergence: ${Object.entries(dg).map(([k, v]) => `${k} ${v.divergences} divergences, max split-R̂ ${v.max_rhat.toFixed(3)}`).join("; ")}.`;
+  const cav = [
+    `Gemma-7B MST has a single pure-cell search per cell. Its 600-1000_1000-1500 cell measured only ≈ 6.5 req/min, about 12× below its MIT value, where the other models show ≈ 3.5×. The two largest positive deviations (≈ +44 % and +86 %) both involve shares of under 3 % of that cell, so a low pure measurement is the likely cause, not super-additivity. Re-measuring that cell is the most valuable next experiment.`,
+    `Mix designs were derived from earlier capacity estimates (load-balanced pᵢ ∝ Cᵢ), and the same pure-cell data are used for the prediction. This is fine for testing a law, but the mixes are not a random sample of workloads: they cover 2–5 components from 5 of the 20 cells.`,
+    `MST pure cells have only 1–2 searches each, so σ_rep for MST is weakly identified. MST mix residuals (σ_mix ≈ 20 %) may partly reflect slow drift over the 30-minute runs, not only true interference between request types.`,
+    `The binary search stops at a bracket 3–6 % wide, which sets a floor on per-run precision. The Bayesian model accounts for this through the logistic transition width s; the frequentist analysis uses the bracket midpoint.`,
+    `Runs of the same design in two experiments are treated as independent replicates. They are close in time, so the frequentist p-values may be slightly optimistic. The random-effects and Bayesian estimates, which model heterogeneity explicitly, are the ones to cite.`,
+  ];
+  $("caveats").innerHTML = cav.map(c => `<li>${c}</li>`).join("");
+}
+
+/* ---------- chart helpers ---------- */
+const tip = $("tip");
+function showTip(ev, html) { tip.innerHTML = html; tip.hidden = false; moveTip(ev); }
+function moveTip(ev) { const w = tip.offsetWidth, h = tip.offsetHeight; let x = ev.clientX + 14, y = ev.clientY + 14; if (x + w > innerWidth - 8) x = ev.clientX - w - 14; if (y + h > innerHeight - 8) y = ev.clientY - h - 14; tip.style.left = x + "px"; tip.style.top = y + "px"; }
+function hideTip() { tip.hidden = true; }
+function svgIn(id, H) {
+  const el = $(id); el.innerHTML = "";
+  const W = Math.max(300, el.clientWidth);
+  const svg = d3.select(el).append("svg").attr("viewBox", `0 0 ${W} ${H}`).attr("role", "img");
+  return {svg, W, H};
+}
+function axisStyle(g) {
+  g.selectAll("path.domain").attr("stroke", css("--axis"));
+  g.selectAll(".tick line").attr("stroke", css("--axis"));
+  g.selectAll(".tick text").attr("fill", css("--muted")).style("font", "11px " + css("--f-mono"));
+}
+function gridY(svg, y, x0, x1, ticks) { svg.append("g").selectAll("line").data(ticks).join("line").attr("x1", x0).attr("x2", x1).attr("y1", d => y(d)).attr("y2", d => y(d)).attr("stroke", css("--grid")); }
+function gridX(svg, x, y0, y1, ticks) { svg.append("g").selectAll("line").data(ticks).join("line").attr("y1", y0).attr("y2", y1).attr("x1", d => x(d)).attr("x2", d => x(d)).attr("stroke", css("--grid")); }
+function label(svg, x, y, t, opt = {}) { return svg.append("text").attr("x", x).attr("y", y).attr("fill", css(opt.c || "--ink-2")).attr("text-anchor", opt.a || "start").style("font", `${opt.w || 400} ${opt.s || 11.5}px ${css(opt.f || "--f-body")}`).text(t); }
+function mark(sel, d, r = 4.5) {
+  // MIT = filled circle with surface ring; MST = hollow square
+  if (d.kind === "MIT") sel.append("circle").attr("r", r).attr("fill", col(d.model)).attr("stroke", css("--surface")).attr("stroke-width", 1.5);
+  else sel.append("rect").attr("x", -r + .5).attr("y", -r + .5).attr("width", 2 * r - 1).attr("height", 2 * r - 1).attr("rx", 1).attr("fill", css("--surface")).attr("stroke", col(d.model)).attr("stroke-width", 2);
+}
+function modelLegend(id, withKinds = true) {
+  $(id).innerHTML = MODELS.map(m => `<span><i style="background:var(${SVAR[m]})"></i>${m}</span>`).join("") +
+    (withKinds ? `<span><i class="ci"></i>MIT (120 s)</span><span><i class="sq"></i>MST (1800 s)</span>` : "");
+}
+const mixTip = (d, extra = "") => `<div class="t">${d.model} · ${d.kind}</div><div class="mono" style="font-size:.74rem;margin-bottom:4px">${d.label.replaceAll(" + ", "<br>")}</div>` +
+  `<div><span class="k">measured</span> ${fmtN(d.obs)} req/min</div><div><span class="k">harmonic</span> ${fmtN(d.H)} · <span class="k">arithmetic</span> ${fmtN(d.A)}</div>` +
+  `<div><span class="k">range</span> ${fmtN(d.cmin)} – ${fmtN(d.cmax)}</div>${extra}`;
+
+/* ---------- Fig 1: observed vs predicted ---------- */
+let LAW = "H";
+function fig1() {
+  const {svg, W, H} = svgIn("fig1", Math.min(560, Math.max(360, $("fig1").clientWidth * .62)));
+  const m = {l: 64, r: 16, t: 12, b: 46};
+  const key = LAW;
+  const all = R.mixes.flatMap(d => [d.obs, d[key]]);
+  const dom = [d3.min(all) / 1.3, d3.max(all) * 1.3];
+  const x = d3.scaleLog().domain(dom).range([m.l, W - m.r]);
+  const y = d3.scaleLog().domain(dom).range([H - m.b, m.t]);
+  const ticks = [100, 300, 1000, 3000, 10000].filter(t => t >= dom[0] && t <= dom[1]);
+  gridY(svg, y, m.l, W - m.r, ticks); gridX(svg, x, m.t, H - m.b, ticks);
+  const band = [dom[0], dom[1]];
+  svg.append("path").attr("d", d3.area().x(v => x(v)).y0(v => y(Math.max(dom[0], v / 1.1))).y1(v => y(Math.min(dom[1], v * 1.1)))(d3.range(0, 41).map(i => dom[0] * Math.pow(dom[1] / dom[0], i / 40)))).attr("fill", css("--band-2"));
+  svg.append("line").attr("x1", x(band[0])).attr("y1", y(band[0])).attr("x2", x(band[1])).attr("y2", y(band[1])).attr("stroke", css("--accent")).attr("stroke-width", 1.5).attr("stroke-dasharray", "4 3");
+  label(svg, x(dom[1]) - 6, y(dom[1] / 1.02) + 26, "measured = predicted (±10 % band)", {a: "end", c: "--accent", s: 11});
+  const ax = svg.append("g").attr("transform", `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickValues(ticks).tickFormat(d3.format(",")).tickSizeOuter(0)); axisStyle(ax);
+  const ay = svg.append("g").attr("transform", `translate(${m.l},0)`).call(d3.axisLeft(y).tickValues(ticks).tickFormat(d3.format(",")).tickSizeOuter(0)); axisStyle(ay);
+  const nm = {H: "harmonic", G: "geometric", A: "arithmetic"}[key];
+  label(svg, (m.l + W - m.r) / 2, H - 8, `predicted capacity, ${nm} law (req/min, log scale)`, {a: "middle", c: "--muted"});
+  svg.append("text").attr("transform", `translate(14,${(m.t + H - m.b) / 2}) rotate(-90)`).attr("text-anchor", "middle").attr("fill", css("--muted")).style("font", "11.5px " + css("--f-body")).text("measured mix capacity (req/min)");
+  const g = svg.append("g").selectAll("g").data(R.mixes).join("g").attr("transform", d => `translate(${x(d[key])},${y(d.obs)})`);
+  g.each(function (d) { mark(d3.select(this), d); });
+  g.append("circle").attr("r", 10).attr("fill", "transparent").style("cursor", "default")
+    .on("mouseenter", (ev, d) => showTip(ev, mixTip(d, `<div><span class="k">measured / ${nm}</span> <b>${pct(Math.log(d.obs / d[key]))}</b></div>`))).on("mousemove", moveTip).on("mouseleave", hideTip);
+  const t = R.tests[key].all;
+  $("cap1").innerHTML = `<b>${nm[0].toUpperCase() + nm.slice(1)} law:</b> mean log-error ${pct(t.mean)}, RMSE ${(100 * t.rmse).toFixed(1)} % (log scale), ${R.mixes.filter(d => Math.abs(d["f" + key]) < Math.log(1.1)).length} of ${R.mixes.length} runs within ±10 %. ` +
+    {H: "Points hug the diagonal over two orders of magnitude, from about 70 to 5,500 req/min.", G: "The geometric law overpredicts almost every mix.", A: "The arithmetic law overpredicts badly, often by 2–5×, because one slow request type drags down the whole server."}[key];
+}
+
+/* ---------- Fig 2a: profile likelihood for q ---------- */
+function fig2a() {
+  const {svg, W, H} = svgIn("fig2a", 300);
+  const m = {l: 46, r: 14, t: 18, b: 44};
+  const P = R.q.prof;
+  const pts = P.grid.map((q, i) => [q, Math.min(P.lr[i], 60)]).filter(p => p[0] >= -2.5 && p[0] <= 2);
+  const x = d3.scaleLinear().domain([-2.5, 2]).range([m.l, W - m.r]);
+  const y = d3.scaleLinear().domain([0, 60]).range([H - m.b, m.t]);
+  gridY(svg, y, m.l, W - m.r, [0, 20, 40, 60]);
+  const qb = R.q.bayes;
+  svg.append("rect").attr("x", x(qb.lo95)).attr("width", Math.max(2, x(qb.hi95) - x(qb.lo95))).attr("y", m.t).attr("height", H - m.b - m.t).attr("fill", css("--band-2"));
+  [[-1, "harmonic"], [0, "geometric"], [1, "arithmetic"]].forEach(([v, n]) => {
+    svg.append("line").attr("x1", x(v)).attr("x2", x(v)).attr("y1", m.t).attr("y2", H - m.b).attr("stroke", css("--axis")).attr("stroke-dasharray", "3 3");
+    label(svg, x(v) + 4, m.t + 10, n, {c: "--muted", s: 10.5});
+  });
+  svg.append("line").attr("x1", m.l).attr("x2", W - m.r).attr("y1", y(3.84)).attr("y2", y(3.84)).attr("stroke", css("--muted")).attr("stroke-dasharray", "1 3");
+  label(svg, W - m.r, y(3.84) - 5, "χ²₁ 95 % cut-off", {a: "end", c: "--muted", s: 10});
+  svg.append("path").attr("d", d3.line().x(p => x(p[0])).y(p => y(p[1])).curve(d3.curveMonotoneX)(pts)).attr("fill", "none").attr("stroke", css("--accent")).attr("stroke-width", 2);
+  svg.append("circle").attr("cx", x(P.q_hat)).attr("cy", y(0)).attr("r", 4.5).attr("fill", css("--accent")).attr("stroke", css("--surface")).attr("stroke-width", 1.5);
+  const ax = svg.append("g").attr("transform", `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(9).tickSizeOuter(0)); axisStyle(ax);
+  const ay = svg.append("g").attr("transform", `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickSizeOuter(0)); axisStyle(ay);
+  label(svg, (m.l + W - m.r) / 2, H - 8, "power-mean exponent q", {a: "middle", c: "--muted"});
+  svg.append("text").attr("transform", `translate(12,${(m.t + H - m.b) / 2}) rotate(-90)`).attr("text-anchor", "middle").attr("fill", css("--muted")).style("font", "11px " + css("--f-body")).text("likelihood-ratio statistic");
+  $("cap2a").innerHTML = `<b>Profile likelihood of q</b> (line) with the Bayesian 95 % credible interval (band, ${qb.lo95.toFixed(2)} to ${qb.hi95.toFixed(2)}). Geometric and arithmetic laws are rejected (LR > 60). The harmonic value q = −1 sits just outside the Bayesian 95 % interval and is not rejected by the profile test (p = ${R.q.prof.p_h.toFixed(3)}). The fitted exponent is a hair above −1, a difference of no practical size (Figure 2b).`;
+}
+
+/* ---------- Fig 2b: predictive score per law ---------- */
+function fig2b() {
+  const {svg, W, H} = svgIn("fig2b", 300);
+  const m = {l: 96, r: 70, t: 14, b: 44};
+  const laws = [["free", "free q"], ["harmonic", "harmonic"], ["geometric", "geometric"], ["arithmetic", "arithmetic"]];
+  const rows = laws.map(([k, n]) => ({k, n, d: R.pred[k].diff_vs_harmonic, se: R.pred[k].diff_se, sd: R.sd[k].mix}));
+  const lo = d3.min(rows, r => r.d - 2 * r.se), hi = d3.max(rows, r => r.d + 2 * r.se);
+  const x = d3.scaleLinear().domain([Math.min(lo, -5) * 1.05, Math.max(hi, 5) * 1.05]).nice().range([m.l, W - m.r]);
+  const y = d3.scaleBand().domain(rows.map(r => r.k)).range([m.t, H - m.b]).padding(.35);
+  gridX(svg, x, m.t, H - m.b, x.ticks(5));
+  svg.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", m.t).attr("y2", H - m.b).attr("stroke", css("--axis"));
+  const g = svg.append("g").selectAll("g").data(rows).join("g").attr("transform", r => `translate(0,${y(r.k) + y.bandwidth() / 2})`);
+  g.append("line").attr("x1", r => x(r.d - 2 * r.se)).attr("x2", r => x(r.d + 2 * r.se)).attr("stroke", css("--accent")).attr("stroke-width", 2).attr("stroke-linecap", "round");
+  g.append("circle").attr("cx", r => x(r.d)).attr("r", 5).attr("fill", css("--accent")).attr("stroke", css("--surface")).attr("stroke-width", 1.5);
+  g.append("text").attr("x", m.l - 10).attr("dy", "0.35em").attr("text-anchor", "end").attr("fill", css("--ink")).style("font", "500 12px " + css("--f-body")).text(r => r.n);
+  g.append("text").attr("x", W - m.r + 8).attr("dy", "0.35em").attr("fill", css("--muted")).style("font", "11px " + css("--f-mono")).text(r => (r.d >= 0 ? "+" : "") + r.d.toFixed(1));
+  const ax = svg.append("g").attr("transform", `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(5).tickSizeOuter(0)); axisStyle(ax);
+  label(svg, (m.l + W - m.r) / 2, H - 8, "Δ predictive log density vs harmonic (± 2 SE)", {a: "middle", c: "--muted"});
+  const p = R.pred;
+  $("cap2b").innerHTML = `<b>Out-of-sample predictive score</b> of each law for the pass/fail verdicts of all mix runs, relative to the harmonic law (higher is better). The geometric (${p.geometric.diff_vs_harmonic.toFixed(1)}) and arithmetic (${p.arithmetic.diff_vs_harmonic.toFixed(1)}) laws predict worse. Freeing q gains ${p.free.diff_vs_harmonic.toFixed(1)} log units, which is within noise.`;
+}
+
+/* ---------- Fig 3: forest of δ ---------- */
+function fig3() {
+  const rows = [...R.groups.map(g => ({...g, name: gname(g.key)})), {key: "all", name: "Pooled (δ₀)", bayes: R.overall.bayes, freq: R.overall.freq}];
+  const {svg, W, H} = svgIn("fig3", 46 + rows.length * 44);
+  const m = {l: Math.min(190, W * .36), r: 92, t: 10, b: 36};
+  const x = d3.scaleLinear().domain([Math.log(0.72), Math.log(1.32)]).range([m.l, W - m.r]);
+  const y = d3.scaleBand().domain(rows.map(r => r.key)).range([m.t, H - m.b]).padding(.2);
+  svg.append("rect").attr("x", x(-Math.log(1.1))).attr("width", x(Math.log(1.1)) - x(-Math.log(1.1))).attr("y", m.t).attr("height", H - m.b - m.t).attr("fill", css("--band"));
+  const tv = [0.8, 0.9, 1, 1.1, 1.2, 1.3].map(Math.log);
+  gridX(svg, x, m.t, H - m.b, tv);
+  svg.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", m.t).attr("y2", H - m.b).attr("stroke", css("--axis")).attr("stroke-width", 1.5);
+  const c = v => x(Math.max(x.domain()[0], Math.min(x.domain()[1], v)));
+  const g = svg.append("g").selectAll("g").data(rows).join("g").attr("transform", r => `translate(0,${y(r.key)})`);
+  const bh = y.bandwidth();
+  g.filter(r => r.key === "all").append("line").attr("x1", 0).attr("x2", W).attr("y1", -4).attr("y2", -4).attr("stroke", css("--line"));
+  g.append("line").attr("x1", r => c(r.bayes.lo95)).attr("x2", r => c(r.bayes.hi95)).attr("y1", bh * .35).attr("y2", bh * .35).attr("stroke", css("--accent")).attr("stroke-width", 1.5);
+  g.append("line").attr("x1", r => c(r.bayes.lo90)).attr("x2", r => c(r.bayes.hi90)).attr("y1", bh * .35).attr("y2", bh * .35).attr("stroke", css("--accent")).attr("stroke-width", 5).attr("stroke-linecap", "round");
+  g.append("circle").attr("cx", r => c(r.bayes.med)).attr("cy", bh * .35).attr("r", 5).attr("fill", css("--accent")).attr("stroke", css("--surface")).attr("stroke-width", 2);
+  g.append("line").attr("x1", r => c(r.freq.lo)).attr("x2", r => c(r.freq.hi)).attr("y1", bh * .78).attr("y2", bh * .78).attr("stroke", css("--muted")).attr("stroke-width", 1.5);
+  g.append("circle").attr("cx", r => c(r.freq.mean)).attr("cy", bh * .78).attr("r", 3.5).attr("fill", css("--surface")).attr("stroke", css("--muted")).attr("stroke-width", 1.5);
+  g.append("text").attr("x", m.l - 12).attr("y", bh * .45).attr("text-anchor", "end").attr("fill", css("--ink")).style("font", `${"500"} 12px ${css("--f-body")}`).text(r => r.name);
+  g.append("text").attr("x", m.l - 12).attr("y", bh * .45 + 14).attr("text-anchor", "end").attr("fill", css("--muted")).style("font", `10.5px ${css("--f-mono")}`).text(r => `n = ${r.freq.n}`);
+  g.append("text").attr("x", W - m.r + 10).attr("y", bh * .45).attr("fill", css("--ink")).style("font", `500 11.5px ${css("--f-mono")}`).text(r => pct(r.bayes.med));
+  g.append("text").attr("x", W - m.r + 10).attr("y", bh * .45 + 14).attr("fill", css("--muted")).style("font", `10.5px ${css("--f-mono")}`).text(r => `P(ROPE) ${Math.round(100 * r.bayes.p_rope)}%`);
+  g.append("rect").attr("x", 0).attr("width", W).attr("height", bh).attr("fill", "transparent")
+    .on("mouseenter", (ev, r) => showTip(ev, `<div class="t">${r.name}</div><div><span class="k">Bayes δ</span> ${pct(r.bayes.med)} [${pct(r.bayes.lo90)}, ${pct(r.bayes.hi90)}] 90 %</div><div><span class="k">P(|δ| &lt; 10 %)</span> ${pctr(r.bayes.p_rope)} · <span class="k">P(|δ| &lt; 5 %)</span> ${pctr(r.bayes.p_rope5)}</div><div><span class="k">P(δ &gt; 0)</span> ${pctr(r.bayes.p_gt0)}</div><div><span class="k">freq. mean</span> ${pct(r.freq.mean)} [${pct(r.freq.lo)}, ${pct(r.freq.hi)}] 95 %</div>`)).on("mousemove", moveTip).on("mouseleave", hideTip);
+  const ax = svg.append("g").attr("transform", `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickValues(tv).tickFormat(v => pct(v, 0)).tickSizeOuter(0)); axisStyle(ax);
+  label(svg, x(0), H - 4, "mix capacity vs harmonic prediction", {a: "middle", c: "--muted", s: 11});
+  const gs = R.groups.map(g => [gname(g.key), g.bayes]);
+  const inR = gs.filter(([, b]) => b.hi90 < Math.log(1.1) && b.lo90 > -Math.log(1.1)).map(([n]) => n);
+  const nIn = gs.filter(([, b]) => b.med > -Math.log(1.1) && b.med < Math.log(1.1)).length;
+  $("cap3").innerHTML = `${nIn} of the 6 model × test groups have a posterior median within ±10 %, but only ${inR.length ? inR.join(", ") : "none"} has its whole 90 % interval inside the band. Gemma-7B mixes run a little <i>above</i> the harmonic law (${pct(R.groups.find(g => g.key === "Gemma-7B|MIT").bayes.med)} for MIT), while DeepSeek and Llama mixes run below it (DeepSeek MIT ${pct(R.groups.find(g => g.key === "DeepSeek-R1-Qwen-7B|MIT").bayes.med)}, Llama MIT ${pct(R.groups.find(g => g.key === "Llama-3.1-8B|MIT").bayes.med)}). Llama-3.1-8B MST has the largest shortfall, ${pct(R.groups.find(g => g.key === "Llama-3.1-8B|MST").bayes.med)}. Bayesian estimates are partially pooled toward δ₀, which is why Gemma MST (n = 6) is pulled in from its raw mean.`;
+}
+
+/* ---------- Fig 4: caterpillar ---------- */
+function fig4() {
+  const {svg, W, H} = svgIn("fig4", 340);
+  const m = {l: 56, r: 12, t: 12, b: 34};
+  const d = [...R.mixes].sort((a, b) => a.rH - b.rH);
+  const x = d3.scaleBand().domain(d.map((_, i) => i)).range([m.l, W - m.r]).padding(.15);
+  const lim = [Math.log(0.45), Math.log(2.1)];
+  const y = d3.scaleLinear().domain(lim).range([H - m.b, m.t]);
+  const cy = v => y(Math.max(lim[0], Math.min(lim[1], v)));
+  svg.append("rect").attr("x", m.l).attr("width", W - m.r - m.l).attr("y", y(Math.log(1.1))).attr("height", y(-Math.log(1.1)) - y(Math.log(1.1))).attr("fill", css("--band"));
+  const tv = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 2].map(Math.log);
+  gridY(svg, y, m.l, W - m.r, tv);
+  svg.append("line").attr("x1", m.l).attr("x2", W - m.r).attr("y1", y(0)).attr("y2", y(0)).attr("stroke", css("--axis")).attr("stroke-width", 1.5);
+  const g = svg.append("g").selectAll("g").data(d).join("g").attr("transform", (_, i) => `translate(${x(i) + x.bandwidth() / 2},0)`);
+  g.append("line").attr("y1", r => cy(r.rH_lo)).attr("y2", r => cy(r.rH_hi)).attr("stroke", r => col(r.model)).attr("stroke-width", Math.max(1.2, Math.min(2, x.bandwidth() * .5))).attr("stroke-opacity", .55);
+  g.each(function (r) { const s = d3.select(this).append("g").attr("transform", `translate(0,${cy(r.rH)})`); mark(s, r, Math.max(2.5, Math.min(4, x.bandwidth() * .7))); });
+  g.append("rect").attr("x", -Math.max(4, x.bandwidth() / 2)).attr("width", Math.max(8, x.bandwidth())).attr("y", m.t).attr("height", H - m.b - m.t).attr("fill", "transparent")
+    .on("mouseenter", (ev, r) => showTip(ev, mixTip(r, `<div><span class="k">deviation (Bayes)</span> <b>${pct(r.rH)}</b> [${pct(r.rH_lo)}, ${pct(r.rH_hi)}]</div><div><span class="k">P(within ±10 %)</span> ${pctr(r.p_rope)}</div><div><span class="k">design</span> ${r.family}</div>`))).on("mousemove", moveTip).on("mouseleave", hideTip);
+  const ay = svg.append("g").attr("transform", `translate(${m.l},0)`).call(d3.axisLeft(y).tickValues(tv).tickFormat(v => pct(v, 0)).tickSizeOuter(0)); axisStyle(ay);
+  label(svg, (m.l + W - m.r) / 2, H - 10, `${d.length} mix runs, sorted by posterior deviation from the harmonic law`, {a: "middle", c: "--muted"});
+  const nb = d.filter(r => r.rH_hi < -Math.log(1.1)).length, na = d.filter(r => r.rH_lo > Math.log(1.1)).length;
+  $("cap4").innerHTML = `<b>${pctr(R.share.rope.med)}</b> of runs are most probably within ±10 % (posterior). ${nb} runs are credibly more than 10 % <i>below</i> the prediction and ${na} credibly above it. <b>All ${nb + na} are MST (1800 s) runs</b>; no MIT run departs credibly from ±10 %. The shortfalls are mostly Llama-3.1-8B and DeepSeek MST mixes, many containing the long-prompt 600-1000_1-100 cell. The two largest excesses are Gemma-7B mixes holding a tiny share (≤ 3 %) of the 600-1000_1000-1500 cell, whose pure MST capacity is probably under-measured (see caveats).`;
+}
+
+/* ---------- Fig 5: Jensen envelope ---------- */
+function fig5() {
+  const grp = R.groups.map(g => g.key);
+  const {svg, W, H} = svgIn("fig5", 40 + grp.length * 46);
+  const m = {l: Math.min(190, W * .36), r: 18, t: 22, b: 36};
+  const lim = [-2.2, 1.2];
+  const x = d3.scaleLinear().domain(lim).range([m.l, W - m.r]);
+  const y = d3.scaleBand().domain(grp).range([m.t, H - m.b]).padding(.15);
+  svg.append("rect").attr("x", x(0)).attr("width", x(1) - x(0)).attr("y", m.t).attr("height", H - m.b - m.t).attr("fill", css("--band"));
+  gridX(svg, x, m.t, H - m.b, [-2, -1, 0, 0.5, 1]);
+  [[0, "harmonic"], [1, "arithmetic"]].forEach(([v, n]) => { svg.append("line").attr("x1", x(v)).attr("x2", x(v)).attr("y1", m.t).attr("y2", H - m.b).attr("stroke", css("--axis")).attr("stroke-width", 1.5); label(svg, x(v), m.t - 7, n, {a: "middle", c: "--muted", s: 10.5}); });
+  const rnd = d3.randomLcg(42);
+  const g = svg.append("g").selectAll("g").data(R.mixes).join("g")
+    .attr("transform", d => `translate(${x(Math.max(lim[0], Math.min(lim[1], d.pos)))},${y(d.model + "|" + d.kind) + y.bandwidth() * (0.2 + 0.6 * rnd())})`);
+  g.each(function (d) { mark(d3.select(this), d, 4); });
+  g.append("circle").attr("r", 8).attr("fill", "transparent").on("mouseenter", (ev, d) => showTip(ev, mixTip(d, `<div><span class="k">envelope position</span> ${d.pos.toFixed(2)}</div><div><span class="k">P(in [min, max])</span> ${pctr(d.p_minmax)}</div>`))).on("mousemove", moveTip).on("mouseleave", hideTip);
+  svg.append("g").selectAll("text").data(grp).join("text").attr("x", m.l - 12).attr("y", d => y(d) + y.bandwidth() / 2).attr("dy", "0.35em").attr("text-anchor", "end").attr("fill", css("--ink")).style("font", "500 12px " + css("--f-body")).text(gname);
+  const ax = svg.append("g").attr("transform", `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickValues([-2, -1, 0, 0.5, 1]).tickSizeOuter(0)); axisStyle(ax);
+  label(svg, (m.l + W - m.r) / 2, H - 4, "(log C_mix − log H) / (log A − log H)", {a: "middle", c: "--muted", s: 11, f: "--f-mono"});
+  $("cap5").innerHTML = `No run reaches the arithmetic mean (position 1). ${R.bounds.HA[0]} of ${R.bounds.HA[1]} fall inside the harmonic–arithmetic envelope, and ${R.bounds.below_H} sit slightly below the harmonic value. Positions far below 0 come from a narrow envelope (components of similar capacity, or one component dominating the mix), where a few percent of shortfall spans many envelope widths (compare Figure 4). <b>Boundedness by the component range holds for ${R.bounds.minmax[0]}/${R.bounds.minmax[1]} runs</b>. Posterior P(inside [min, max]) is above 50 % for ${R.mixes.filter(d => d.p_minmax > .5).length} runs.`;
+}
+
+/* ---------- Fig 6: variance components ---------- */
+function fig6() {
+  const rows = [];
+  ["MIT", "MST"].forEach(k => {
+    rows.push({k, n: `σ_rep · ${k}`, v: R.sd.harmonic.rep[k], c: "--muted"});
+    rows.push({k, n: `s · ${k}`, v: R.sd.harmonic.s[k], c: "--muted"});
+    rows.push({k, n: `σ_mix harmonic · ${k}`, v: R.sd.harmonic.mix[k], c: "--accent"});
+    rows.push({k, n: `σ_mix arithmetic · ${k}`, v: R.sd.arithmetic.mix[k], c: "--ink-2"});
+  });
+  const {svg, W, H} = svgIn("fig6", 40 + rows.length * 30);
+  const m = {l: 150, r: 50, t: 8, b: 36};
+  const x = d3.scaleLinear().domain([0, Math.min(0.9, d3.max(rows, r => r.v.hi95) * 1.08)]).range([m.l, W - m.r]);
+  const y = d3.scaleBand().domain(rows.map(r => r.n)).range([m.t, H - m.b]).padding(.3);
+  gridX(svg, x, m.t, H - m.b, x.ticks(5));
+  const g = svg.append("g").selectAll("g").data(rows).join("g").attr("transform", r => `translate(0,${y(r.n) + y.bandwidth() / 2})`);
+  g.append("line").attr("x1", r => x(r.v.lo90)).attr("x2", r => x(Math.min(x.domain()[1], r.v.hi90))).attr("stroke", r => css(r.c)).attr("stroke-width", 4).attr("stroke-linecap", "round");
+  g.append("circle").attr("cx", r => x(r.v.med)).attr("r", 4.5).attr("fill", r => css(r.c)).attr("stroke", css("--surface")).attr("stroke-width", 1.5);
+  g.append("text").attr("x", m.l - 10).attr("dy", "0.35em").attr("text-anchor", "end").attr("fill", css("--ink")).style("font", "11.5px " + css("--f-mono")).text(r => r.n);
+  g.append("text").attr("x", r => x(Math.min(x.domain()[1], r.v.hi90)) + 8).attr("dy", "0.35em").attr("fill", css("--muted")).style("font", "10.5px " + css("--f-mono")).text(r => r.v.med.toFixed(3));
+  const ax = svg.append("g").attr("transform", `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(5).tickSizeOuter(0)); axisStyle(ax);
+  label(svg, (m.l + W - m.r) / 2, H - 4, "posterior SD on log-capacity scale (90 % CrI)", {a: "middle", c: "--muted", s: 11});
+  const S = R.sd.harmonic;
+  $("cap6").innerHTML = `<b>Noise budget.</b> Replicating a pure cell moves its capacity by only ≈ ${(100 * S.rep.MIT.med).toFixed(1)} % (MIT) and ${(100 * S.rep.MST.med).toFixed(1)} % (MST). Mix residuals around the harmonic law are ≈ ${(100 * S.mix.MIT.med).toFixed(0)} % and ${(100 * S.mix.MST.med).toFixed(0)} %, against ${(100 * R.sd.arithmetic.mix.MIT.med).toFixed(0)} % and ${(100 * R.sd.arithmetic.mix.MST.med).toFixed(0)} % for the arithmetic law. MST (1800 s) mixes are noisier than MIT (120 s) mixes.`;
+}
+
+/* ---------- Fig 7: design family ---------- */
+function fig7() {
+  const fams = ["equal-count", "load-balanced", "multi-type"];
+  const {svg, W, H} = svgIn("fig7", 40 + fams.length * 2 * 34);
+  const m = {l: 150, r: 18, t: 8, b: 36};
+  const keys = fams.flatMap(f => ["MIT", "MST"].map(k => f + "|" + k)).filter(k => R.mixes.some(d => d.family + "|" + d.kind === k));
+  const x = d3.scaleLinear().domain([Math.log(0.5), Math.log(1.9)]).range([m.l, W - m.r]);
+  const y = d3.scaleBand().domain(keys).range([m.t, H - m.b]).padding(.2);
+  svg.append("rect").attr("x", x(-Math.log(1.1))).attr("width", x(Math.log(1.1)) - x(-Math.log(1.1))).attr("y", m.t).attr("height", H - m.b - m.t).attr("fill", css("--band"));
+  const tv = [0.5, 0.67, 0.8, 1, 1.25, 1.5].map(Math.log);
+  gridX(svg, x, m.t, H - m.b, tv);
+  svg.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", m.t).attr("y2", H - m.b).attr("stroke", css("--axis")).attr("stroke-width", 1.5);
+  const rnd = d3.randomLcg(7);
+  const pts = R.mixes.filter(d => keys.includes(d.family + "|" + d.kind));
+  const g = svg.append("g").selectAll("g").data(pts).join("g").attr("transform", d => `translate(${x(Math.max(x.domain()[0], Math.min(x.domain()[1], d.rH)))},${y(d.family + "|" + d.kind) + y.bandwidth() * (0.2 + 0.6 * rnd())})`);
+  g.each(function (d) { mark(d3.select(this), d, 3.5); });
+  g.append("circle").attr("r", 7).attr("fill", "transparent").on("mouseenter", (ev, d) => showTip(ev, mixTip(d, `<div><span class="k">deviation</span> <b>${pct(d.rH)}</b></div>`))).on("mousemove", moveTip).on("mouseleave", hideTip);
+  keys.forEach(k => {
+    const v = pts.filter(d => d.family + "|" + d.kind === k).map(d => d.rH);
+    const mu = d3.mean(v);
+    svg.append("line").attr("x1", x(mu)).attr("x2", x(mu)).attr("y1", y(k) + 2).attr("y2", y(k) + y.bandwidth() - 2).attr("stroke", css("--ink")).attr("stroke-width", 2.5).attr("stroke-linecap", "round");
+    label(svg, m.l - 10, y(k) + y.bandwidth() / 2 + 4, `${k.replace("|", " · ")} (${v.length})`, {a: "end", c: "--ink", s: 11.5});
+  });
+  const ax = svg.append("g").attr("transform", `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickValues(tv).tickFormat(v => pct(v, 0)).tickSizeOuter(0)); axisStyle(ax);
+  label(svg, (m.l + W - m.r) / 2, H - 4, "deviation from harmonic law (black tick = mean)", {a: "middle", c: "--muted", s: 11});
+  const F = R.family;
+  $("cap7").innerHTML = `<b>Mix design does not matter.</b> The mean deviation is ${pct(F["equal-count"].mean)} for equal-count (50/50) mixes, ${pct(F["load-balanced"].mean)} for load-balanced and ${pct(F["multi-type"].mean)} for 4–5-type mixes (Kruskal–Wallis p = ${R.drivers.family_kw_p.toFixed(2)}). The spread of component capacities does not predict the deviation either (Spearman ρ = ${R.drivers.spearman_hetero[0].toFixed(2)}, p = ${R.drivers.spearman_hetero[1].toFixed(2)}). What does matter is the test type: MST spreads far wider than MIT.`;
+}
+
+/* ---------- tables ---------- */
+let TLAW = "H";
+function tables() {
+  const T = R.tests[TLAW];
+  const order = ["all", "MIT", "MST", ...R.groups.map(g => g.key)];
+  const head = ["Group", "n", "mean", "95 % CI", "t-test p", "Wilcoxon p", "TOST ±10 % p", "RE mean", "RE 95 % CI", "τ", "I²", "RMSE"];
+  $("ttable").innerHTML = `<thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>` + order.filter(k => T[k]).map(k => {
+    const t = T[k];
+    return `<tr><td>${k === "all" ? "All runs" : gname(k)}</td><td>${t.n}</td><td>${pct(t.mean)}</td><td>${pct(t.ci95[0])} … ${pct(t.ci95[1])}</td><td>${fmtP(t.p_t)}</td><td>${fmtP(t.p_wilcoxon)}</td><td>${fmtP(t.p_tost)}</td><td>${pct(t.re_mean)}</td><td>${pct(t.re_ci[0])} … ${pct(t.re_ci[1])}</td><td>${t.tau.toFixed(3)}</td><td>${pctr(t.I2)}</td><td>${(100 * t.rmse).toFixed(1)} %</td></tr>`;
+  }).join("") + "</tbody>";
+  $("tnote").textContent = `Calibration regression log C_obs = a + b·log Ĉ_H: b = ${R.calib.b.toFixed(3)} [${R.calib.b_ci[0].toFixed(3)}, ${R.calib.b_ci[1].toFixed(3)}] (cluster-robust by model), a = ${R.calib.a.toFixed(3)}, R² = ${R.calib.r2.toFixed(3)}; joint F-test of (a, b) = (0, 1): p = ${fmtP(R.calib.p_F)}. The slope is exactly 1: the law scales correctly, and only the constant offset (the bias δ) differs. Paired Wilcoxon on |error|: harmonic vs arithmetic p ${fmtP(R.meta.hv_a)}, harmonic vs geometric p ${fmtP(R.meta.hv_g)}.`;
+}
+function mtable() {
+  const head = ["Mix (cell@share)", "Model", "Test", "Design", "Measured", "Harmonic", "Arithmetic", "Min", "Max", "Deviation (Bayes)", "90 % CrI", "P(±10 %)"];
+  const d = [...R.mixes].sort((a, b) => a.model.localeCompare(b.model) || a.kind.localeCompare(b.kind) || a.rH - b.rH);
+  $("mtable").innerHTML = `<thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>` + d.map(r => `<tr><td class="lbl">${r.label}</td><td>${r.model}</td><td>${r.kind}</td><td>${r.family}</td><td>${fmtN(r.obs)}</td><td>${fmtN(r.H)}</td><td>${fmtN(r.A)}</td><td>${fmtN(r.cmin)}</td><td>${fmtN(r.cmax)}</td><td>${pct(r.rH)}</td><td>${pct(r.rH_lo)} … ${pct(r.rH_hi)}</td><td>${pctr(r.p_rope)}</td></tr>`).join("") + "</tbody>";
+}
+
+function seg(prefix, keys, onSel) {
+  keys.forEach(k => $(prefix + k).addEventListener("click", () => { keys.forEach(j => $(prefix + j).setAttribute("aria-pressed", j === k)); onSel(k); }));
+}
+function drawAll() { fig1(); fig2a(); fig2b(); fig3(); fig4(); fig5(); fig6(); fig7(); }
+function boot() {
+  if (!R || !window.d3) { document.querySelector(".wrap").insertAdjacentHTML("afterbegin", "<p>Chart data or library failed to load.</p>"); return; }
+  text(); modelLegend("legend1"); modelLegend("legend4"); modelLegend("legend5"); tables(); mtable(); drawAll();
+  seg("law-", ["H", "G", "A"], k => { LAW = k; fig1(); });
+  seg("tlaw-", ["H", "G", "A"], k => { TLAW = k; tables(); });
+  let t; addEventListener("resize", () => { clearTimeout(t); t = setTimeout(drawAll, 150); });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawAll);
+  new MutationObserver(drawAll).observe(document.documentElement, {attributes: true, attributeFilter: ["data-theme"]});
+  if (document.fonts) document.fonts.ready.then(drawAll);
+}
+boot();
+</script>
