@@ -29,7 +29,9 @@ def main(out_dir, html_path):
             rH=round(b["rH"], 4), rH_lo=round(b["rH_ci"][0], 4), rH_hi=round(b["rH_ci"][1], 4),
             fH=round(r.r_H, 4), fG=round(r.r_G, 4), fA=round(r.r_A, 4),
             p_rope=round(b["p_rope"], 3), p_minmax=round(b["p_minmax"], 3), p_HA=round(b["p_HA"], 3),
-            pos=round(float((np.log(r.c_obs) - np.log(r.H)) / (np.log(r.A) - np.log(r.H))), 3),
+            # position inside the harmonic-arithmetic envelope (0 for one-component mixes, where H = A)
+            pos=round(float((np.log(r.c_obs) - np.log(r.H)) / (np.log(r.A) - np.log(r.H))), 3)
+            if r.A > r.H * (1 + 1e-9) else 0.0,
         ))
 
     def iv(x):

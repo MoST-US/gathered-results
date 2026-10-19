@@ -22,6 +22,7 @@ Needs:  pandas numpy scipy statsmodels pymc arviz
 """
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -347,70 +348,103 @@ def bayesian(d, units, draws=1500, tune=1500, chains=4, debug=False):
 
     c0 = float(np.log(500))  # centring constant keeps exp() in range for any plausible q
 
-    def log_power_mean(mu, q):
-        # log M_q = log(sum_i p_i C_i^q) / q, written densely (W has zeros for absent cells)
-        return pt.log(pt.dot(W, pt.exp(q * (mu - c0)))) / q + c0
+    # ---- Two-stage ("cut") model -------------------------------------------------------------
+    # Stage 1 estimates the pure-cell capacities from pure runs only. Stage 2 fits the mixes with
+    # those capacities fixed at their posterior means plus a known prediction error per mix
+    # (delta method on the stage-1 covariance). Without the cut, a handful of extreme mixes (Gemma
+    # MST with the heavy cell) pull the shared pure-cell capacities away from their own data and
+    # the joint posterior becomes multimodal.
+    pure_obs = obs[obs.unit.isin(set(pure.unit))]
+    p_unit = pure_obs.unit.map(uid).values
+    p_logr = np.log(pure_obs.REQ_MIN.values)
+    p_y = pure_obs.EVALUATION.values.astype(int)
+    p_kind = np.array([kinds.index(k) for k in pure_obs.kind])
+    mix_obs_df = obs[obs.unit.isin(set(mixes.unit))]
+    m_unit = mix_obs_df.unit.map(uid).values - nP
+    m_logr = np.log(mix_obs_df.REQ_MIN.values)
+    m_y = mix_obs_df.EVALUATION.values.astype(int)
+    m_kind = np.array([kinds.index(k) for k in mix_obs_df.kind])
+
+    def softplus_ll(y, eta):
+        x = -(2 * y - 1) * eta
+        return -pt.sum(pt.maximum(x, 0) + pt.log1p(pt.exp(-pt.abs(x))))
+
+    with pm.Model():
+        mu = pm.Normal("mu", mu=np.log(500), sigma=3, shape=nC, initval=mu_init)
+        sd_rep = pm.HalfNormal("sd_rep", 0.3, shape=2)
+        s_p = pm.LogNormal("s", np.log(0.05), 0.5, shape=2)
+        zp = pm.Normal("zp", 0, 1, shape=nP)
+        theta_p = mu[pure_cell] + sd_rep[pure_kind] * zp
+        pm.Potential("y", softplus_ll(p_y, (theta_p[p_unit] - p_logr) / s_p[p_kind]))
+        stage1 = pm.sample(draws=draws, tune=tune, chains=chains, target_accept=0.95,
+                           random_seed=20261005, progressbar=False)
+    diag = {"pure_cells": dict(divergences=int(stage1.sample_stats["diverging"].values.sum()),
+                               max_rhat=max(split_rhat(stage1.posterior[v].values)
+                                            for v in ["mu", "sd_rep", "s"]))}
+    print("pure_cells", diag["pure_cells"], file=sys.stderr)
+    mu_draws = stage1.posterior["mu"].values.reshape(-1, nC)
+    mu_hat = mu_draws.mean(0)
+    mu_cov = np.cov(mu_draws, rowvar=False)
+
+    def np_log_pm(muv, q):
+        if abs(q) < 1e-9:
+            return W @ muv
+        return np.log(W @ np.exp(q * (muv - c0))) / q + c0
+
+    def pred_se(q):
+        # gradient of log M_q wrt mu: weights p_i C_i^q / sum_j p_j C_j^q
+        e = W * np.exp(q * (mu_hat - c0))[None, :]
+        g = e / e.sum(1, keepdims=True)
+        return np.sqrt(np.einsum("mi,ij,mj->m", g, mu_cov, g))
 
     def build(q_mode):
         with pm.Model() as model:
-            mu = pm.Normal("mu", mu=np.log(500), sigma=3, shape=nC, initval=mu_init)
-            sd_rep = pm.HalfNormal("sd_rep", 0.3, shape=2)
             sd_mix = pm.HalfNormal("sd_mix", 0.3, shape=2)  # between designs (non-additivity)
             sd_run = pm.HalfNormal("sd_run", 0.2, shape=2)  # between repeated runs of a design
-            # width of the pass/fail transition (log scale); log-normal keeps it off 0, where
-            # near-separable pass/fail data would otherwise create a funnel
             s = pm.LogNormal("s", np.log(0.05), 0.5, shape=2)
             delta0 = pm.Normal("delta0", 0, 0.5)
             sd_delta = pm.HalfNormal("sd_delta", 0.2)
             zg = pm.Normal("zg", 0, 1, shape=len(groups))
             delta = pm.Deterministic("delta", delta0 + sd_delta * zg)
             if q_mode == "free":
-                q = pm.Normal("q", 0, 2)
-                q = pt.switch(pt.abs(q) < 1e-4, 1e-4, q)
+                q_raw = pm.Normal("q", 0, 2)
+                q = pt.switch(pt.abs(q_raw) < 1e-4, 1e-4, q_raw)
+                pred = pt.log(pt.dot(W, pt.exp(q * (mu_hat - c0)))) / q + c0
+                se = pt.as_tensor_variable(pred_se(-1.0))
             else:
-                q = pt.as_tensor_variable(float(q_mode))
-            zp = pm.Normal("zp", 0, 1, shape=nP)
-            # Student-t design effects: a few designs depart strongly (heavy-cell MST mixes) and
-            # must not drag the pure-cell capacities they share with every other mix
+                pred = pt.as_tensor_variable(np_log_pm(mu_hat, float(q_mode)))
+                se = pt.as_tensor_variable(pred_se(float(q_mode)))
+            ze = pm.Normal("ze", 0, 1, shape=nM)  # error of the prediction (component capacities)
+            # Student-t design and run effects: a few designs depart strongly, and some designs
+            # flip between two outcomes from one repeat to the next
             ud = pm.StudentT("ud", nu=4, mu=0, sigma=1, shape=nD)
-            # run effects are heavy-tailed too: repeats usually agree, but some designs flip
-            # between two outcomes from one run to the next
             zm = pm.StudentT("zm", nu=4, mu=0, sigma=1, shape=nM)
-            theta_p = mu[pure_cell] + sd_rep[pure_kind] * zp
-            pred = log_power_mean(mu, q)
-            theta_m = pred + delta[mix_group] + sd_mix[mix_kind] * ud[mix_design] + sd_run[mix_kind] * zm
-            pm.Deterministic("theta_m", theta_m)
-            pm.Deterministic("logH", log_power_mean(mu, -1.0))
-            pm.Deterministic("logA", log_power_mean(mu, 1.0))
-            pm.Deterministic("logmin", pt.min(pt.switch(mask, mu[None, :], np.inf), axis=1))
-            pm.Deterministic("logmax", pt.max(pt.switch(mask, mu[None, :], -np.inf), axis=1))
-            theta = pt.concatenate([theta_p, theta_m])
-            # Bernoulli-logit written as a stable softplus: pytensor's log1pexp gradient turns
-            # NaN at the very large logits produced by the low-capacity cells
-            x = -(2 * o_y - 1) * (theta[o_unit] - o_logr) / s[o_kind]
-            pm.Potential("y", -pt.sum(pt.maximum(x, 0) + pt.log1p(pt.exp(-pt.abs(x)))))
+            theta_m = pm.Deterministic(
+                "theta_m", pred + se * ze + delta[mix_group]
+                + sd_mix[mix_kind] * ud[mix_design] + sd_run[mix_kind] * zm)
+            pm.Potential("y", softplus_ll(m_y, (theta_m[m_unit] - m_logr) / s[m_kind]))
         return model
 
     if debug:
         return build, locals()
-    fits, diag = {}, {}
+    fits = {}
     for name, qm in [("free", "free"), ("harmonic", -1.0), ("geometric", 1e-4), ("arithmetic", 1.0)]:
         with build(qm):
             idata = pm.sample(draws=draws, tune=tune, chains=chains, target_accept=0.95,
                               random_seed=20261005, progressbar=False)
         fits[name] = idata
+        if os.environ.get("ADDITIVITY_SAVE_IDATA"):
+            np.savez(os.path.join(os.environ["ADDITIVITY_SAVE_IDATA"], name + ".npz"),
+                     **{v: idata.posterior[v].values for v in idata.posterior.data_vars})
         diag[name] = dict(divergences=int(idata.sample_stats["diverging"].values.sum()),
                           max_rhat=max(split_rhat(idata.posterior[v].values)
-                                       for v in ["mu", "delta", "sd_mix", "sd_run", "sd_rep", "s", "theta_m"]))
+                                       for v in ["delta", "sd_mix", "sd_run", "s", "theta_m"]
+                                       + (["q"] if name == "free" else [])))
         print(name, diag[name], file=sys.stderr)
 
-    # Predictive score of each law: how well does "law + group bias + residual scale" predict
-    # the pass/fail outcomes of a mix run? The run's own residual is integrated out (drawn from
-    # its N(0, sd_mix) prior) so a law cannot hide its misfit in that residual; the score is the
-    # Monte-Carlo log predictive density per mix run, summed over runs.
-    mix_obs = obs.unit.map(uid).values - nP
-    sel = mix_obs >= 0
-    mo, lr_, yk, kk = mix_obs[sel], o_logr[sel], o_y[sel], o_kind[sel]
+    # Predictive score of each law: how well does "law + group bias + residual scales" predict
+    # the pass/fail outcomes of a run of a NEW design? Design and run effects are drawn afresh, so
+    # a law cannot hide its misfit in them; Monte-Carlo log predictive density summed over runs.
     rng = np.random.default_rng(7)
     loo = {}
     for name, idata in fits.items():
@@ -423,15 +457,15 @@ def bayesian(d, units, draws=1500, tune=1500, chains=4, debug=False):
         sdm = post_["sd_mix"].values.reshape(S, 2)[take][:, mix_kind]
         sdr = post_["sd_run"].values.reshape(S, 2)[take][:, mix_kind]
         sk = post_["s"].values.reshape(S, 2)[take]
-        center = th - sdm * ud_ - sdr * zm_  # law prediction + group bias, residuals removed
+        center = th - sdm * ud_ - sdr * zm_
         lls = []
         for _ in range(8):
-            # predict a new design: fresh design and run effects
-            t_new = center + sdm * rng.standard_t(4, size=center.shape) + sdr * rng.standard_t(4, size=center.shape)
-            x = -(2 * yk - 1) * (t_new[:, mo] - lr_) / sk[:, kk]
+            t_new = (center + sdm * rng.standard_t(4, size=center.shape)
+                     + sdr * rng.standard_t(4, size=center.shape))
+            x = -(2 * m_y - 1) * (t_new[:, m_unit] - m_logr) / sk[:, m_kind]
             ll_obs = -(np.maximum(x, 0) + np.log1p(np.exp(-np.abs(x))))
             ll = np.zeros((len(take), nM))
-            np.add.at(ll.T, mo, ll_obs.T)
+            np.add.at(ll.T, m_unit, ll_obs.T)
             lls.append(ll)
         ll = np.concatenate(lls)
         lpd = np.log(np.mean(np.exp(ll - ll.max(0)), axis=0)) + ll.max(0)
@@ -442,12 +476,16 @@ def bayesian(d, units, draws=1500, tune=1500, chains=4, debug=False):
         loo[name]["diff_vs_harmonic"] = float(diff.sum())
         loo[name]["diff_se"] = float(np.sqrt(len(diff)) * diff.std(ddof=1))
         del loo[name]["pointwise"]
+
+    # bounds and harmonic/arithmetic predictions per stage-1 draw (component uncertainty)
     post = fits["harmonic"].posterior
-    th = post["theta_m"].stack(s=("chain", "draw")).values  # (nM, S)
-    H = post["logH"].stack(s=("chain", "draw")).values
-    A = post["logA"].stack(s=("chain", "draw")).values
-    lmin = post["logmin"].stack(s=("chain", "draw")).values
-    lmax = post["logmax"].stack(s=("chain", "draw")).values
+    th = post["theta_m"].values.reshape(-1, nM).T  # (nM, S)
+    pick = np.random.default_rng(3).integers(0, len(mu_draws), th.shape[1])
+    mus = mu_draws[pick]  # (S, nC)
+    H = np.stack([np_log_pm(m_, -1.0) for m_ in mus], axis=1)
+    A = np.stack([np_log_pm(m_, 1.0) for m_ in mus], axis=1)
+    lmin = np.stack([np.where(mask, m_[None, :], np.inf).min(1) for m_ in mus], axis=1)
+    lmax = np.stack([np.where(mask, m_[None, :], -np.inf).max(1) for m_ in mus], axis=1)
     rH = th - H
     rA = th - A
 
@@ -479,8 +517,9 @@ def bayesian(d, units, draws=1500, tune=1500, chains=4, debug=False):
 
     res = {"groups": ["%s|%s" % g for g in groups], "per_mix": per_mix, "diagnostics": diag, "loo": loo}
     for law, idata in fits.items():
-        p = {v: idata.posterior[v] for v in ["delta0", "delta", "sd_mix", "sd_run", "sd_rep", "s"]
+        p = {v: idata.posterior[v] for v in ["delta0", "delta", "sd_mix", "sd_run", "s"]
              + (["q"] if law == "free" else [])}
+        p["sd_rep"] = stage1.posterior["sd_rep"]
         p = type("P", (), p)
         res[law] = dict(delta0=summ(p.delta0.values),
                         delta={"%s|%s" % g: summ(p.delta.values[..., j]) for j, g in enumerate(groups)},
@@ -497,7 +536,7 @@ def bayesian(d, units, draws=1500, tune=1500, chains=4, debug=False):
     res["share_HA"] = summ(((th >= H) & (th <= A)).mean(axis=0))
     res["share_rope"] = summ((np.abs(rH) < ROPE).mean(axis=0))
     # posterior cell capacities
-    mu_post = fits["harmonic"].posterior["mu"].stack(s=("chain", "draw")).values
+    mu_post = mu_draws.T
     res["cells"] = [dict(model=c[0], kind=c[1], cell=c[2], cap=float(np.exp(np.median(mu_post[i]))),
                          ci=[float(np.exp(v)) for v in hdi(mu_post[i])]) for i, c in enumerate(cells)]
     return res
@@ -507,7 +546,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="analysis_out")
     ap.add_argument("--skip-bayes", action="store_true")
-    ap.add_argument("--draws", type=int, default=1500)
+    ap.add_argument("--draws", type=int, default=600)  # also used as tuning steps
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)

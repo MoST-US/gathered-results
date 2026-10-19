@@ -6,10 +6,13 @@ Interpretación del análisis de aditividad y acotabilidad sobre el archivo `MIT
 - **Volumen:** 301 ejecuciones de 114 mezclas distintas y 7.944 evaluaciones del SLA.
 - **Tipos de prueba:** MIT (2 minutos) y MST (30 minutos de carga sostenida).
 
-> **Estado:** las cifras de este documento salen del análisis frecuentista, que toma cada diseño
-> de mezcla como unidad (las repeticiones se promedian). El ajuste bayesiano con los datos nuevos
-> está pendiente de converger. Cuando lo haga se regenerará el informe HTML y se añadirán aquí
-> sus cifras.
+> **Cómo leer las cifras:** salvo que se diga lo contrario, salen del análisis frecuentista, que
+> toma cada diseño de mezcla como unidad (las repeticiones se promedian). La sección 6 resume el
+> análisis bayesiano, que llega a las mismas conclusiones.
+>
+> **Para verlo de forma intuitiva:** [`report/animaciones.html`](report/animaciones.html) tiene 8
+> escenas interactivas que ilustran cada idea de este documento. El informe con todas las figuras
+> y tablas está en [`report/additivity-report.html`](report/additivity-report.html).
 
 ---
 
@@ -222,25 +225,57 @@ media alrededor de la mitad del servidor.
 
 ---
 
-## 6. En resumen
+## 6. Lo que añade el análisis bayesiano
+
+El modelo bayesiano usa cada veredicto de pasa/falla del SLA, no solo el resultado final de la
+búsqueda, y separa tres fuentes de variación. Se ajusta en dos etapas: primero las capacidades
+puras, solo con datos puros; después las mezclas. Así, unas pocas mezclas extremas no deforman la
+capacidad estimada de las celdas puras.
+
+| Fuente de variación | MIT | MST |
+| --- | --- | --- |
+| Repetir una celda pura | 0,3 % | 1,7 % |
+| Repetir un mismo diseño de mezcla | 0,3 % | 1,8 % |
+| Desviación propia de cada diseño respecto a la regla | 6 % | 19 % |
+
+Esto confirma que **las repeticiones son muy estables** y que lo que se desvía es el diseño, no la
+medida.
+
+- **La regla:** exponente q = −0,96 (intervalo creíble 95 %: −1,02 a −0,88). Incluye la armónica
+  (q = −1). Dejar q libre no mejora la capacidad predictiva (+1,7 ± 3,3), mientras que la media
+  geométrica (−265) y el promedio simple (−441) predicen mucho peor.
+- **El sesgo:** −5,5 % de media (intervalo creíble 90 %: −9,9 % a −1,0 %). La probabilidad de que
+  esté dentro de ±10 % es del 92 %.
+- **Por modelo:** DeepSeek y Llama quedan un 7–9 % por debajo de la regla. Gemma queda prácticamente
+  en ella (−0,3 % en MIT, −4,6 % en MST). El modelo trata como casos atípicos sus pocas mezclas con
+  el tipo pesado (hasta +200 %), en vez de desplazar todo el grupo. Es la misma conclusión que el
+  ANOVA: Gemma solo se aparta cuando hay peticiones pesadas.
+- **Margen para planificar:** una banda del 90 % alrededor de la predicción armónica es de **±15 % en
+  MIT** y **±39 % en MST**.
+- **Límites:** el 98 % de las ejecuciones queda, con probabilidad posterior, entre su tipo más lento
+  y su tipo más rápido.
+
+---
+
+## 7. En resumen
 
 1. Para predecir la capacidad de una mezcla hay que **sumar lo que ocupa cada petición** (regla
    armónica), no promediar capacidades.
-2. La regla acierta en media en **MIT y MST por igual** (~−3 %). En **MIT** la predicción concreta
-   es fiable (±10 %); en **MST** es el doble de imprecisa.
+2. La regla acierta en media en **MIT y MST por igual** (−3 % a −5 %). En **MIT** la predicción
+   concreta es fiable (±10–15 %); en **MST** es el doble de imprecisa.
 3. La regla falla con **peticiones muy pesadas**, y ahí el resultado depende del modelo. El que
    más memoria usa por token (Gemma) es el que más se desvía.
 4. Parte del fallo probablemente viene de **cómo se evalúa el SLA** en mezclas, más que del
    servidor.
+5. **Repetir da el mismo resultado:** la variación entre repeticiones es inferior al 2 %.
 
-## 7. Siguientes pasos
+## 8. Siguientes pasos
 
 - Revisar en el código de MoST cómo se calcula el veredicto del SLA en MST. Si es agregado,
   evaluarlo también por tipo de petición.
 - Repetir las mezclas con el tipo pesado una vez revisado el SLA.
 - Para separar el efecto de la arquitectura, comparar modelos que difieran solo en la atención (MHA
   frente a GQA) con tamaño similar.
-- Terminar el ajuste bayesiano y regenerar el informe con los datos nuevos.
 
 ---
 
@@ -257,6 +292,7 @@ media alrededor de la mitad del servidor.
 ```
 python analysis/additivity_analysis.py --out <dir>     # análisis frecuentista + bayesiano (PyMC)
 python analysis/build_report.py <dir> report.html      # informe HTML con las figuras
+python analysis/build_animations.py <dir> anim.html    # escenas animadas (solo usa los datos frecuentistas)
 ```
 
 Requiere `pandas numpy scipy statsmodels pymc arviz`. En Windows, conviene crear el entorno virtual
