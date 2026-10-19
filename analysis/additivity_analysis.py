@@ -58,7 +58,14 @@ def load():
     d["is_mix"] = kind[0].notna()
     d["kind"] = kind[1]
     d["unit"] = d.RESULTS_SOURCE + "|" + d.EXPERIMENT_NAME + "|" + d.IDENTIFIER
-    return d.sort_values(["unit", "DATE"]).reset_index(drop=True)
+    d = d.sort_values(["unit", "DATE"]).reset_index(drop=True)
+    # Some mix runs are stored twice: under two differently truncated folder names in the same
+    # experiment (same hash suffix), or copied into a later experiment. Iteration timestamps are
+    # unique to a physical run, so identical traces are one run; keep the first copy.
+    trace = d.groupby("unit").apply(lambda x: tuple(zip(x.DATE, x.REQ_MIN, x.TOTAL_REQUESTS)))
+    keep = set(trace[~trace.duplicated()].index)
+    d.attrs["duplicate_units"] = int(len(trace) - len(keep))
+    return d[d.unit.isin(keep)].reset_index(drop=True)
 
 
 def parse_mix(s):
@@ -147,7 +154,8 @@ def frequentist(units):
                         se=float(np.sqrt(se_pred ** 2 + se_obs ** 2)),
                         hetero=float(mu.max() - mu.min()),
                         has_long_out=any(k.endswith("1000-1500") for k in keys),
-                        family=("equal-count" if len(set(np.round(list(m.design.values()), 6))) == 1
+                        family=("single-type" if len(keys) == 1
+                                else "equal-count" if len(set(np.round(list(m.design.values()), 6))) == 1
                                 else ("multi-type" if len(keys) > 2 else "load-balanced")),
                         load_share_max=float(w.max()),
                         in_minmax=bool(np.exp(mu.min()) <= m.c_hat <= np.exp(mu.max())),
@@ -183,13 +191,22 @@ def frequentist(units):
                     Q=Q, p_Q=float(1 - stats.chi2.cdf(Q, n - 1)), tau=float(np.sqrt(tau2)),
                     I2=float(max(0.0, (Q - (n - 1)) / Q)) if Q > 0 else 0.0)
 
-    out["tests"] = {}
-    for law in ["H", "G", "A"]:
-        out["tests"][law] = {"all": tests(fm["r_" + law].values, fm.se.values)}
-        for (mo, k), g in fm.groupby(["model", "kind"]):
-            out["tests"][law]["%s|%s" % (mo, k)] = tests(g["r_" + law].values, g.se.values)
-        for k, g in fm.groupby("kind"):
-            out["tests"][law][k] = tests(g["r_" + law].values, g.se.values)
+    # Repeated runs of a design are not independent evidence about additivity: average them per
+    # design (precision grows with the number of runs) and test across designs.
+    fm["design"] = fm.model + "|" + fm.kind + "|" + fm.label
+    fd = fm.groupby("design").agg(model=("model", "first"), kind=("kind", "first"), runs=("unit", "size"),
+                                  r_H=("r_H", "mean"), r_G=("r_G", "mean"), r_A=("r_A", "mean"),
+                                  se=("se", "mean"))
+    fd["se"] = fd.se / np.sqrt(fd.runs)
+    out["n_design_units"] = int(len(fd))
+    out["tests"], out["tests_runs"] = {}, {}
+    for key, frame in [("tests", fd), ("tests_runs", fm)]:
+        for law in ["H", "G", "A"]:
+            out[key][law] = {"all": tests(frame["r_" + law].values, frame.se.values)}
+            for (mo, k), g in frame.groupby(["model", "kind"]):
+                out[key][law]["%s|%s" % (mo, k)] = tests(g["r_" + law].values, g.se.values)
+            for k, g in frame.groupby("kind"):
+                out[key][law][k] = tests(g["r_" + law].values, g.se.values)
 
     # which law predicts better: paired comparison of absolute errors
     out["H_vs_A_wilcoxon_p"] = float(stats.wilcoxon(np.abs(fm.r_H), np.abs(fm.r_A)).pvalue)
@@ -234,13 +251,41 @@ def frequentist(units):
                          HA=[int(fm.in_HA.sum()), len(fm), cp(fm.in_HA.sum(), len(fm))],
                          above_A=int((fm.c_obs > fm.A).sum()), below_H=int((fm.c_obs < fm.H).sum()))
 
+    # reproducibility of the mixes themselves: spread of repeated runs of the same design
+    rep = []
+    for (mo, k, lab), g in fm.groupby(["model", "kind", "label"]):
+        if len(g) >= 2:
+            rep.append(dict(model=mo, kind=k, label=lab, n=len(g),
+                            sd=float(np.log(g.c_obs).std(ddof=1)),
+                            spread=float(np.log(g.c_obs.max() / g.c_obs.min()))))
+    rep = pd.DataFrame(rep)
+    out["mix_replicates"] = {
+        k: dict(designs=int(len(g)), runs=int(g.n.sum()),
+                pooled_sd=float(np.sqrt(np.sum((g.n - 1) * g.sd ** 2) / np.sum(g.n - 1))),
+                median_sd=float(g.sd.median()), max_spread=float(g.spread.max()),
+                unstable=g[g.spread > np.log(1.5)][["model", "label", "n", "spread"]].to_dict("records"))
+        for k, g in rep.groupby("kind")}
+
     # what drives deviations from harmonic additivity
     rho, prho = stats.spearmanr(fm.hetero, fm.r_H)
     mw = stats.mannwhitneyu(fm.r_H[fm.has_long_out], fm.r_H[~fm.has_long_out])
     kw = stats.kruskal(*[g.r_H.values for _, g in fm.groupby("kind")])
-    fam = {f: tests(g.r_H.values, g.se.values) for f, g in fm.groupby("family")}
-    kwf = stats.kruskal(*[g.r_H.values for _, g in fm.groupby("family")])
+    # a one-cell "mix" is a sanity check, not a design family; tiny groups are left out of tests
+    fam_groups = [(f, g) for f, g in fm.groupby("family") if len(g) >= 3 and f != "single-type"]
+    fam = {f: tests(g.r_H.values, g.se.values) for f, g in fam_groups}
+    kwf = stats.kruskal(*[g.r_H.values for _, g in fam_groups])
+    fam_kind = []
+    for (f, k), g in fm.groupby(["family", "kind"]):
+        fam_kind.append(dict(family=f, kind=k, n=len(g), mean=float(g.r_H.mean()),
+                             within10=float(np.mean(np.abs(g.r_H) < ROPE))))
+    mw_kind = {}
+    for k, g in fm.groupby("kind"):
+        a_, b_ = g.r_H[g.family == "equal-count"], g.r_H[g.family == "load-balanced"]
+        if len(a_) >= 3 and len(b_) >= 3:
+            mw_kind[k] = dict(mw_p=float(stats.mannwhitneyu(a_, b_).pvalue),
+                              levene_p=float(stats.levene(a_, b_).pvalue))
     out["drivers"] = dict(spearman_hetero=[float(rho), float(prho)], family=fam,
+                          family_kind=fam_kind, family_mw_by_kind=mw_kind,
                           family_kw_p=float(kwf.pvalue),
                           long_out_mw_p=float(mw.pvalue), kind_kw_p=float(kw.pvalue))
     return fm, out
@@ -284,6 +329,12 @@ def bayesian(d, units, draws=1500, tune=1500, chains=4, debug=False):
             W[i, cidx[(m.model, m.kind, k)]] = p
     mask = W > 0
     logW = np.log(np.where(mask, W, 1.0))
+    # Repeated runs of one design share a design effect (its true departure from the law); the
+    # run effect on top of it is run-to-run instability.
+    dkey = mixes.model + "|" + mixes.kind + "|" + mixes.label
+    designs = sorted(dkey.unique())
+    mix_design = dkey.map({k: i for i, k in enumerate(designs)}).values
+    nD = len(designs)
 
     mu_init = np.array([np.log(pure.c_hat[pure_cell == i]).mean() for i in range(nC)])
     uid = {u: i for i, u in enumerate(pure.unit)}
@@ -304,7 +355,8 @@ def bayesian(d, units, draws=1500, tune=1500, chains=4, debug=False):
         with pm.Model() as model:
             mu = pm.Normal("mu", mu=np.log(500), sigma=3, shape=nC, initval=mu_init)
             sd_rep = pm.HalfNormal("sd_rep", 0.3, shape=2)
-            sd_mix = pm.HalfNormal("sd_mix", 0.3, shape=2)
+            sd_mix = pm.HalfNormal("sd_mix", 0.3, shape=2)  # between designs (non-additivity)
+            sd_run = pm.HalfNormal("sd_run", 0.2, shape=2)  # between repeated runs of a design
             # width of the pass/fail transition (log scale); log-normal keeps it off 0, where
             # near-separable pass/fail data would otherwise create a funnel
             s = pm.LogNormal("s", np.log(0.05), 0.5, shape=2)
@@ -318,10 +370,15 @@ def bayesian(d, units, draws=1500, tune=1500, chains=4, debug=False):
             else:
                 q = pt.as_tensor_variable(float(q_mode))
             zp = pm.Normal("zp", 0, 1, shape=nP)
-            zm = pm.Normal("zm", 0, 1, shape=nM)
+            # Student-t design effects: a few designs depart strongly (heavy-cell MST mixes) and
+            # must not drag the pure-cell capacities they share with every other mix
+            ud = pm.StudentT("ud", nu=4, mu=0, sigma=1, shape=nD)
+            # run effects are heavy-tailed too: repeats usually agree, but some designs flip
+            # between two outcomes from one run to the next
+            zm = pm.StudentT("zm", nu=4, mu=0, sigma=1, shape=nM)
             theta_p = mu[pure_cell] + sd_rep[pure_kind] * zp
             pred = log_power_mean(mu, q)
-            theta_m = pred + delta[mix_group] + sd_mix[mix_kind] * zm
+            theta_m = pred + delta[mix_group] + sd_mix[mix_kind] * ud[mix_design] + sd_run[mix_kind] * zm
             pm.Deterministic("theta_m", theta_m)
             pm.Deterministic("logH", log_power_mean(mu, -1.0))
             pm.Deterministic("logA", log_power_mean(mu, 1.0))
@@ -344,7 +401,7 @@ def bayesian(d, units, draws=1500, tune=1500, chains=4, debug=False):
         fits[name] = idata
         diag[name] = dict(divergences=int(idata.sample_stats["diverging"].values.sum()),
                           max_rhat=max(split_rhat(idata.posterior[v].values)
-                                       for v in ["mu", "delta", "sd_mix", "sd_rep", "s", "theta_m"]))
+                                       for v in ["mu", "delta", "sd_mix", "sd_run", "sd_rep", "s", "theta_m"]))
         print(name, diag[name], file=sys.stderr)
 
     # Predictive score of each law: how well does "law + group bias + residual scale" predict
@@ -362,12 +419,15 @@ def bayesian(d, units, draws=1500, tune=1500, chains=4, debug=False):
         take = rng.choice(S, size=min(S, 1000), replace=False)
         th = post_["theta_m"].values.reshape(S, nM)[take]
         zm_ = post_["zm"].values.reshape(S, nM)[take]
+        ud_ = post_["ud"].values.reshape(S, nD)[take][:, mix_design]
         sdm = post_["sd_mix"].values.reshape(S, 2)[take][:, mix_kind]
+        sdr = post_["sd_run"].values.reshape(S, 2)[take][:, mix_kind]
         sk = post_["s"].values.reshape(S, 2)[take]
-        center = th - sdm * zm_  # law prediction + group bias, residual removed
+        center = th - sdm * ud_ - sdr * zm_  # law prediction + group bias, residuals removed
         lls = []
         for _ in range(8):
-            t_new = center + sdm * rng.standard_normal(center.shape)
+            # predict a new design: fresh design and run effects
+            t_new = center + sdm * rng.standard_t(4, size=center.shape) + sdr * rng.standard_t(4, size=center.shape)
             x = -(2 * yk - 1) * (t_new[:, mo] - lr_) / sk[:, kk]
             ll_obs = -(np.maximum(x, 0) + np.log1p(np.exp(-np.abs(x))))
             ll = np.zeros((len(take), nM))
@@ -419,12 +479,13 @@ def bayesian(d, units, draws=1500, tune=1500, chains=4, debug=False):
 
     res = {"groups": ["%s|%s" % g for g in groups], "per_mix": per_mix, "diagnostics": diag, "loo": loo}
     for law, idata in fits.items():
-        p = {v: idata.posterior[v] for v in ["delta0", "delta", "sd_mix", "sd_rep", "s"]
+        p = {v: idata.posterior[v] for v in ["delta0", "delta", "sd_mix", "sd_run", "sd_rep", "s"]
              + (["q"] if law == "free" else [])}
         p = type("P", (), p)
         res[law] = dict(delta0=summ(p.delta0.values),
                         delta={"%s|%s" % g: summ(p.delta.values[..., j]) for j, g in enumerate(groups)},
                         sd_mix={k: summ(p.sd_mix.values[..., j]) for j, k in enumerate(kinds)},
+                        sd_run={k: summ(p.sd_run.values[..., j]) for j, k in enumerate(kinds)},
                         sd_rep={k: summ(p.sd_rep.values[..., j]) for j, k in enumerate(kinds)},
                         s={k: summ(p.s.values[..., j]) for j, k in enumerate(kinds)})
         if law == "free":
@@ -457,6 +518,7 @@ def main():
     fm, freq = frequentist(units)
     fm.to_csv(out / "mix_frequentist.csv", index=False)
     res = {"freq": freq, "n_rows": len(d), "n_units": len(units),
+           "duplicate_units_removed": d.attrs.get("duplicate_units", 0),
            "non_monotone_pure": int((~units[~units.is_mix].monotone).sum()),
            "mix_rows": fm.drop(columns=["mu", "p"]).to_dict("records")}
     if not args.skip_bayes:

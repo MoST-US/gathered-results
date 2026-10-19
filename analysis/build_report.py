@@ -52,6 +52,7 @@ def main(out_dir, html_path):
                          p_h=freq["q_profile"]["p_q_minus1"])),
         sd={law: dict(rep={k: iv(v) for k, v in bayes[law]["sd_rep"].items()},
                       mix={k: iv(v) for k, v in bayes[law]["sd_mix"].items()},
+                      run={k: iv(v) for k, v in bayes[law]["sd_run"].items()},
                       s={k: iv(v) for k, v in bayes[law]["s"].items()})
             for law in ["harmonic", "geometric", "arithmetic", "free"]},
         delta0={law: iv(bayes[law]["delta0"]) for law in ["harmonic", "geometric", "arithmetic", "free"]},
@@ -67,6 +68,25 @@ def main(out_dir, html_path):
                   hv_a=freq["H_vs_A_wilcoxon_p"], hv_g=freq["H_vs_G_wilcoxon_p"],
                   h_better=freq["H_better_share"], non_monotone=res["non_monotone_pure"]),
     )
+    # sensitivity: mixes with / without the heaviest cell (long prompt + long answer)
+    fm["heavy"] = fm.label.str.contains("600-1000_1000-1500")
+    sens = []
+    for (k, h), g in fm.groupby(["kind", "heavy"]):
+        sens.append(dict(kind=k, heavy=bool(h), n=len(g), mean=float(g.r_H.mean()), sd=float(g.r_H.std()),
+                         within10=float(np.mean(np.abs(g.r_H) < np.log(1.1)))))
+    sens_model = []
+    for (mo, k, h), g in fm.groupby(["model", "kind", "heavy"]):
+        sens_model.append(dict(model=mo, kind=k, heavy=bool(h), n=len(g), mean=float(g.r_H.mean())))
+    data["sens"] = sens
+    data["sens_model"] = sens_model
+    data["mix_rep"] = freq.get("mix_replicates", {})
+    data["family_kind"] = freq["drivers"].get("family_kind", [])
+    data["meta"]["dups"] = res.get("duplicate_units_removed", 0)
+    data["meta"]["design_units"] = freq.get("n_design_units")
+    data["meta"]["repeated_runs"] = int(sum(v["runs"] for v in freq.get("mix_replicates", {}).values()))
+    data["meta"]["repeated_designs"] = int(sum(v["designs"] for v in freq.get("mix_replicates", {}).values()))
+    data["bounds_out"] = [dict(model=r.model, kind=r.kind, label=r.label, ratio=float(r.c_obs / r.cmin))
+                          for _, r in fm[~fm.in_minmax].iterrows()]
     tpl = (HERE / "report_template.html").read_text(encoding="utf-8")
     html = tpl.replace("/*__DATA__*/null", json.dumps(data, separators=(",", ":"), default=float))
     Path(html_path).write_text(html, encoding="utf-8")
