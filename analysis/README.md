@@ -104,14 +104,12 @@ placeholder for the operational-analysis reference.
 
 ## Publishing
 
-**GitHub Pages.** The site is the `docs/` folder of `main`. Either:
-
-1. *Settings → Pages → Build and deployment → Source: Deploy from a branch*, branch `main`, folder
-   `/docs`; or
-2. *Source: GitHub Actions*, which uses `.github/workflows/artifact.yml`. That workflow deploys
-   `docs/` on every push to `main` and can be run by hand (*Actions → artifact → Run workflow*) to
-   recompute the frequentist or the full analysis before deploying; the recomputed outputs are also
-   attached to the run as a downloadable artifact.
+**GitHub Pages.** The site is the `docs/` folder, built locally with `python analysis/run_all.py`
+and committed. `.github/workflows/artifact.yml` publishes it on every push to `main` that changes
+`docs/` (or by hand: *Actions → artifact → Run workflow*). Its checkout is sparse, so only `docs/`
+is downloaded and the ~20 GB of measurement data never are. Enable it once in *Settings → Pages →
+Build and deployment → Source: GitHub Actions*. Do not use *Deploy from a branch*: that mode clones
+the whole repository.
 
 **Zenodo.** Every page works from `file://`, so an archive of the repository is a complete
 artifact. Note that the repository tracks about 20 GB of request-level files
