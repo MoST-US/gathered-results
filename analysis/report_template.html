@@ -236,6 +236,34 @@ ul.tight { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; color: var(-
   </div>
 </section>
 
+<section id="tb-section">
+  <div class="sec-head prose">
+    <div class="eyebrow">Figure 8 · contribution</div>
+    <h2>Sizing SCALE's token bucket from the burst factor</h2>
+    <p>SCALE refills each user's Consumption Units with a token bucket but leaves two things open: how deep the bucket is (how large and long a burst may be) and where the instantaneous safety threshold sits in the user-facing currency. The burst factor fixes both, and adds a burst-aware bound on oversubscription.</p>
+  </div>
+  <div class="formula">Rule 1 · bucket depth          b = (B − 1) · s · W                  (bursts of B·s for W = 2 min)
+Rule 2 · throttling threshold   Θ = B · SK_max per minute, averaged over the last W minutes
+Rule 3 · burst-safe oversubscription   ρ ≤ B / (1 + φ (B − 1))   (φ = share of the allocation bursting at once)</div>
+  <div class="two">
+    <figure>
+      <div class="controls" style="display:flex;flex-wrap:wrap;gap:10px 18px;font-size:.88rem;color:var(--ink-2)">
+        <label for="tb-s">Plan rate s (units/min) <input id="tb-s" type="number" min="1" step="1" value="100" style="width:6em"></label>
+        <label for="tb-rho">ρ <input id="tb-rho" type="number" min="1" max="3" step="0.05" value="1.2" style="width:5em"></label>
+        <label><input id="tb-safe" type="checkbox"> conservative B (10th percentile)</label>
+      </div>
+      <div class="stats" id="tb-out"></div>
+      <figcaption id="capTb"></figcaption>
+    </figure>
+    <figure>
+      <div class="chart" id="figTb"></div>
+      <figcaption id="capTb2"></figcaption>
+    </figure>
+  </div>
+  <h3>The illustrative plans of the paper's Table 3, re-derived</h3>
+  <div class="tbl"><table id="tbplans"></table></div>
+</section>
+
 <section>
   <div class="sec-head prose"><div class="eyebrow">Inference tables</div><h2>Frequentist tests</h2>
   <p>These tests use the log-ratio r = log(C<sub>mix</sub> / Ĉ<sub>law</sub>), averaged over the repeated runs of each mix design, so each design counts once (n = designs). TOST tests equivalence to zero within ±10 %, so a small p means the bias is practically negligible. The random-effects estimate (DerSimonian–Laird) weights each run by its measurement precision and reports the heterogeneity τ and I².</p></div>
@@ -314,7 +342,7 @@ function text() {
   ];
   $("stats").innerHTML = st.map(([b, s]) => `<div class="stat"><b class="num">${b}</b><span>${s}</span></div>`).join("");
 
-  $("m-data").textContent = `${M.rows.toLocaleString("en-US")} SLA evaluations from the archive Repeated runs of the same mix design (${M.repeated_runs} runs of ${M.repeated_designs} designs, 2–6 runs each) are kept and modelled as runs nested in designs. ${M.dups} folders were byte-identical copies of another run (same iteration timestamps and the same results.csv content, stored under a second folder name or copied into a later experiment); they are counted once, because they are one execution, not a repeat. Three models on one A40 each; MIT = 120 s maximum-inference-throughput runs; MST = 1800 s maximum-sustainable-throughput runs. Pure cells: 20 input×output token-range cells, 4 replicate searches per cell for MIT and 2 for MST. Mixes: ${M.mix_runs} runs of ${M.designs} designs with 1–5 components drawn from 5 cells (1-100_1-100, 1-100_1000-1500, 100-300_300-600, 600-1000_1-100, 600-1000_1000-1500). Two design families: equal-count (50/50) and load-balanced, where pᵢ ∝ Cᵢ so every type takes the same share of the server. One run with a single component serves as a sanity check: it lands within 1 % of its pure-cell capacity.`;
+  $("m-data").textContent = `${M.rows.toLocaleString("en-US")} SLA evaluations from the archive. Repeated runs of the same mix design (${M.repeated_runs} runs of ${M.repeated_designs} designs, 2–6 runs each) are kept and modelled as runs nested in designs. ${M.dups} folders were byte-identical copies of another run (same iteration timestamps and the same results.csv content, stored under a second folder name or copied into a later experiment); they are counted once, because they are one execution, not a repeat. Three models on one A40 each; MIT = 120 s maximum-inference-throughput runs; MST = 1800 s maximum-sustainable-throughput runs. Pure cells: 20 input×output token-range cells, 4 replicate searches per cell for MIT and 2 for MST. Mixes: ${M.mix_runs} runs of ${M.designs} designs with 1–5 components drawn from 5 cells (1-100_1-100, 1-100_1000-1500, 100-300_300-600, 600-1000_1-100, 600-1000_1000-1500). Two design families: equal-count (50/50) and load-balanced, where pᵢ ∝ Cᵢ so every type takes the same share of the server. One run with a single component serves as a sanity check: it lands within 1 % of its pure-cell capacity.`;
   $("m-nonmono").textContent = `${M.non_monotone}`;
   const dg = R.diag;
   $("m-diag").textContent = `Convergence: ${Object.entries(dg).map(([k, v]) => `${k} ${v.divergences} divergences, max split-R̂ ${v.max_rhat.toFixed(3)}`).join("; ")}.`;
@@ -669,7 +697,50 @@ function figBurst() {
   $("capBt").innerHTML = pr.length ? `<b>Portability.</b> The posterior ratio between the burst factors of any two models lies within ${pct(d3.max(pr, p => Math.max(Math.abs(Math.log(p.ci95[0])), Math.abs(Math.log(p.ci95[1])))), 1).replace("+", "")} of one (95 % CrI), and the probability that they are equivalent within ±10 % is at least ${pctr(d3.min(pr, p => p.p_equiv))}. For SCALE, a plan with sustainable rate s can be granted bursts of about ${o.median.toFixed(1)}·s over 2-minute windows.` : "";
 }
 const col_ = m => col(m);
-function drawAll() { fig1(); fig2a(); fig2b(); fig3(); fig4(); fig5(); fig6(); fig7(); figBurst(); }
+
+/* ---------- Fig 8: token bucket ---------- */
+function figTb() {
+  if (!R.tb) { $("tb-section").hidden = true; return; }
+  const T = R.tb, W = T.window_min;
+  const calc = () => {
+    const s = Math.max(0, +$("tb-s").value || 0), rho = Math.max(1, +$("tb-rho").value || 1);
+    const B = $("tb-safe").checked ? T.B_safe : T.B;
+    const phi = Math.max(0, Math.min(1, (B / rho - 1) / (B - 1)));
+    const cells = [
+      [`${B.toFixed(2)}`, "burst factor used"],
+      [`${fmtN(B * s)} /min`, `burst rate allowed for ${W} min`],
+      [`${fmtN((B - 1) * s * W)}`, `bucket depth b (≈ ${((B - 1) * W).toFixed(1)} min of refill)`],
+      [pctr(phi), `of the allocation may burst at once (ρ = ${rho.toFixed(2)})`],
+    ];
+    $("tb-out").innerHTML = cells.map(([b, t]) => `<div class="stat"><b class="num">${b}</b><span>${t}</span></div>`).join("");
+  };
+  ["tb-s", "tb-rho", "tb-safe"].forEach(id => $(id).addEventListener("input", calc));
+  calc();
+  const pm = T.per_model;
+  $("capTb").innerHTML = `<b>Calculator.</b> Typical B = ${T.B.toFixed(2)} (median over the request classes), conservative B<sub>safe</sub> = ${T.B_safe.toFixed(2)} (covers 90 % of the classes). Throttling thresholds Θ = B·SK<sub>max</sub>: ${MODELS.map(m => `${m} ${fmtN(pm[m].throttle)} units/min`).join(", ")}.`;
+
+  const {svg, W: Wd, H} = svgIn("figTb", 280);
+  const m = {l: 48, r: 14, t: 12, b: 40};
+  const x = d3.scaleLinear().domain([0, 1]).range([m.l, Wd - m.r]), y = d3.scaleLinear().domain([0.9, 3.6]).range([H - m.b, m.t]);
+  gridY(svg, y, m.l, Wd - m.r, [1, 1.5, 2, 2.5, 3, 3.5]);
+  const cv = T.curve;
+  svg.append("path").attr("d", d3.area().x(d => x(d.phi)).y0(d => y(Math.max(0.9, d.rho_max_lo))).y1(d => y(Math.min(3.6, d.rho_max_hi)))(cv)).attr("fill", css("--band-2"));
+  svg.append("path").attr("d", d3.line().x(d => x(d.phi)).y(d => y(Math.min(3.6, d.rho_max)))(cv)).attr("fill", "none").attr("stroke", css("--accent")).attr("stroke-width", 2);
+  svg.append("path").attr("d", d3.line().x(d => x(d.phi)).y(d => y(Math.min(3.6, d.rho_max_safe)))(cv)).attr("fill", "none").attr("stroke", css("--accent")).attr("stroke-width", 1.2).attr("stroke-dasharray", "4 3");
+  svg.append("line").attr("x1", m.l).attr("x2", Wd - m.r).attr("y1", y(T.paper_rho)).attr("y2", y(T.paper_rho)).attr("stroke", css("--s2")).attr("stroke-dasharray", "2 3");
+  svg.append("circle").attr("cx", x(T.phi_max)).attr("cy", y(T.paper_rho)).attr("r", 5).attr("fill", css("--s2")).attr("stroke", css("--surface")).attr("stroke-width", 1.5);
+  label(svg, x(T.phi_max) + 8, y(T.paper_rho) - 8, `ρ = ${T.paper_rho}: φ ≤ ${pctr(T.phi_max)}`, {c: "--ink", s: 11});
+  label(svg, Wd - m.r - 4, m.t + 12, "burst-safe region below the curve", {a: "end", c: "--muted", s: 10.5});
+  const ax = svg.append("g").attr("transform", `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(5).tickFormat(v => Math.round(100 * v) + " %").tickSizeOuter(0)); axisStyle(ax);
+  const ay = svg.append("g").attr("transform", `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(6).tickSizeOuter(0)); axisStyle(ay);
+  label(svg, (m.l + Wd - m.r) / 2, H - 8, "share of the allocation bursting at once (φ)", {a: "middle", c: "--muted", s: 10.5});
+  svg.append("text").attr("transform", `translate(13,${(m.t + H - m.b) / 2}) rotate(-90)`).attr("text-anchor", "middle").attr("fill", css("--muted")).style("font", "11px " + css("--f-body")).text("max. burst-safe ρ");
+  $("capTb2").innerHTML = `<b>Burst-safe oversubscription (Rule 3).</b> Solid: B = ${T.B.toFixed(2)}; dashed: B<sub>safe</sub>; band: B ± 15 %. If at most half of the allocation bursts at once, ρ can reach ${T.rho_max_half.toFixed(2)}; if a quarter does, ${T.rho_max_quarter.toFixed(2)}.`;
+
+  const head = ["Plan", "ρ", "Quota (req/30 min)", "Sustained s (req/min)", "Burst from B (req/2 min)", "Bucket depth b (req)", "Paper's Table 3 burst (req/2 min)"];
+  $("tbplans").innerHTML = `<thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>` + T.plans.map(p => `<tr><td>${p.plan}</td><td>${p.rho.toFixed(1)}</td><td>${p.quota_30m.toFixed(0)}</td><td>${p.s_per_min.toFixed(2)}</td><td>${p.burst_per_2m.toFixed(0)}</td><td>${p.depth.toFixed(0)}</td><td>${p.paper_burst_per_2m}</td></tr>`).join("") + "</tbody>";
+}
+function drawAll() { fig1(); fig2a(); fig2b(); fig3(); fig4(); fig5(); fig6(); fig7(); figBurst(); figTb(); }
 function boot() {
   if (!R || !window.d3) { document.querySelector(".wrap").insertAdjacentHTML("afterbegin", "<p>Chart data or library failed to load.</p>"); return; }
   text(); modelLegend("legend1"); modelLegend("legend4"); modelLegend("legend5"); tables(); mtable(); stable(); drawAll();

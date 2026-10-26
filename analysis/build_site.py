@@ -55,20 +55,21 @@ ul { margin:0; padding-left:1.2em; color:var(--ink-2); display:grid; gap:4px; } 
 <header>
   <div class="eyebrow">SCALE · replication artifact · additivity and burst factor</div>
   <h1>Can the capacity of LLM request mixes be predicted?</h1>
-  <p class="lede">Analysis of __RUNS__ MoST mix runs (__DESIGNS__ designs) and __PURE__ pure-class runs on three 7–8 B models served on NVIDIA A40 GPUs. It tests whether SCALE's Capacity Units add up when request classes are mixed, and characterises the burst factor MIT / MST that governs burst allowances.</p>
+  <p class="lede">Analysis of __RUNS__ MoST mix runs (__DESIGNS__ designs) and __PURE__ pure-class runs on three 7–8 B models served on NVIDIA A40 GPUs. It tests whether SCALE's Capacity Units add up when request classes are mixed, characterises the burst factor MIT / MST, and derives from it the token-bucket parameters that SCALE leaves open.</p>
 </header>
 <div class="stats">
   <div><b>q = __Q__</b><span>estimated combination exponent (harmonic = −1)</span></div>
   <div><b>__BIAS__</b><span>mean bias of mixes versus the harmonic law</span></div>
   <div><b>__BOUNDS__</b><span>runs within the capacity range of their classes</span></div>
   <div><b>B ≈ __BURST__</b><span>median burst factor, practically equal across models</span></div>
+  <div><b>b ≈ __DEPTH__ min</b><span>token-bucket depth, in minutes of refill, that the burst factor implies</span></div>
 </div>
 <section style="display:grid;gap:14px">
   <h2>Explore</h2>
   <div class="cards">
     <a class="card" href="report.html"><b>Statistical report</b><span>Frequentist and Bayesian analysis with interactive figures, inference tables and every mix run.</span></a>
-    <a class="card" href="animations.html"><b>Animated explanations</b><span>Nine interactive scenes that build the intuition behind the results.</span></a>
-    <a class="card" href="animaciones.html"><b>Animaciones (español)</b><span>The same nine scenes in Spanish.</span></a>
+    <a class="card" href="animations.html"><b>Animated explanations</b><span>Ten interactive scenes that build the intuition behind the results, from the harmonic rule to sizing the token bucket.</span></a>
+    <a class="card" href="animaciones.html"><b>Animaciones (español)</b><span>The same ten scenes in Spanish.</span></a>
     <a class="card" href="latex/preview.pdf"><b>LaTeX assets</b><span>Draft section, tables, figures and macros for the paper, compiled as a preview PDF.</span></a>
   </div>
   <p>Download every LaTeX asset (macros, tables, figures, draft section): <a href="latex-assets.zip">latex-assets.zip</a>.</p>
@@ -160,7 +161,8 @@ def main():
             .replace("__PURE__", f"{R['n_units'] - f['n_mix_runs']}").replace("__Q__", f"{q:.2f}".replace("-", "−"))
             .replace("__BIAS__", f"{100 * (math.exp(bias) - 1):+.1f} %".replace("-", "−"))
             .replace("__BOUNDS__", f"{f['bounds']['minmax'][0]}/{f['bounds']['minmax'][1]}")
-            .replace("__BURST__", f"{burst_val:.1f}").replace("__BUILT__", date.today().isoformat()))
+            .replace("__BURST__", f"{burst_val:.1f}")
+            .replace("__DEPTH__", f"{(R.get('token_bucket') or {}).get('depth_min', 2 * (burst_val - 1)):.0f}").replace("__BUILT__", date.today().isoformat()))
     (out / "index.html").write_text(html, encoding="utf-8")
     print("site written to", out)
 

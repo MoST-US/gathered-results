@@ -12,6 +12,16 @@ this repository:
   request class withstands during a 2-minute burst. SCALE prices requests with sustainable units and
   keeps instantaneous capacity as a safety threshold; both price classes the same way only if B_r is
   constant.
+- **Token-bucket sizing (contribution).** SCALE refills Consumption Units with a token bucket but
+  leaves its depth and the instantaneous safety threshold unspecified. The burst factor fixes both
+  and bounds oversubscription under bursts:
+  - **Rule 1, bucket depth:** b = (B − 1) · s · W, i.e. about 5 minutes of refill for B ≈ 3.5 and the
+    2-minute MIT window W.
+  - **Rule 2, throttling threshold in the user-facing currency:** Θ = B · SK_max per minute, averaged
+    over W.
+  - **Rule 3, burst-safe oversubscription:** ρ ≤ B / (1 + φ (B − 1)), where φ is the share of the
+    allocation bursting at once. With ρ = 1.2, up to 77 % of the allocation may burst
+    simultaneously.
 
 Browse the results at the published site (`docs/`, see *Publishing* below) or open
 `docs/index.html` locally.
@@ -27,6 +37,8 @@ Browse the results at the published site (`docs/`, see *Publishing* below) or op
 | Heaviest class | 600–1000 in / 1000–1500 out breaks additivity, in a model-dependent way |
 | Stability | Repeated runs differ by < 2 %; departures are design-specific, not noise |
 | Burst factor | ≈ 3.5 for every model (pairwise ratios within 3.5 % of 1); 77 % of classes within ±15 %; short answers +13 % |
+| Token bucket | Depth ≈ 5 min of refill (4.6 min with the conservative B = 3.29); Θ ≈ 7,300–8,200 units/min; with ρ = 1.2, φ ≤ 77 % |
+| Paper's Table 3 | Its burst values equal 21× the sustained rate; the measured B gives a Basic plan 14 requests per 2 min and a 10-request bucket |
 
 The figures quoted in the paper come from `latex/macros.tex`, which is regenerated with the
 results, so text and data cannot drift apart.
@@ -99,7 +111,10 @@ Then `\input{latex/section_additivity_burst}` for the draft subsections, or use 
 (`\input{latex/tables/tab_laws}` inside a `table` environment) and figures
 (`\includegraphics{latex/figures/fig_burst}`) individually. Paths inside the draft section are
 relative to `latex/`; adjust them, or set `\graphicspath`, when the files live elsewhere.
-`preview.tex` compiles everything with the LNCS class. The draft cites `TODO-denning-buzen` as a
+`preview.tex` compiles everything with the LNCS class. The draft also contains a subsection,
+*Sizing the token bucket from the burst factor*, written as a contribution (Rules 1–3, Tables
+`tab_token_bucket` and `tab_plans`, Figure `fig_token_bucket`), and, in its header, suggested
+bullets for the list of contributions in the introduction. The draft cites `TODO-denning-buzen` as a
 placeholder for the operational-analysis reference.
 
 ## Publishing

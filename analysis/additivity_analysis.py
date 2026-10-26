@@ -565,6 +565,7 @@ def main():
     if not args.skip_bayes:
         res["bayes"] = bayesian(d, units, draws=args.draws, tune=args.draws)
         res["burst_bayes"] = burst_analysis.bayesian(d, units, draws=args.draws, tune=args.draws)
+    res["token_bucket"] = burst_analysis.token_bucket(res["burst"], res.get("burst_bayes"))
     (out / "results.json").write_text(json.dumps(res, indent=1, default=float))
     print(json.dumps({k: v for k, v in freq.items() if k not in ("cells",)}, indent=1, default=float))
 

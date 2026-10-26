@@ -402,6 +402,12 @@ aclarar qué datos alimentan cada figura y, si hace falta, unificar las fuentes.
    - *Conclusion:* remitir al análisis estadístico en lugar de la inspección visual.
 6. **Related work:** situar K en la tradición del análisis operacional y de la caracterización de
    rendimiento con medias armónicas.
+7. **Nueva contribución: el burst factor y el cubo de fichas** (sección 9.4):
+   - una RQ4 sobre el burst factor;
+   - una subsección con las tres reglas que fijan el control de admisión de SCALE (tamaño del cubo,
+     umbral de *throttling* y sobresuscripción segura frente a ráfagas);
+   - rehacer la Tabla 3 con los valores medidos;
+   - añadir la viñeta correspondiente a la lista de contribuciones de la introducción.
 
 ## 9. El burst factor: cuánto aguantan las ráfagas
 
@@ -447,9 +453,8 @@ sola moneda.
 
 - **Una sola moneda es suficiente.** Para el 77 % de los tipos, cobrar las ráfagas con la moneda
   sostenible se equivoca en menos de un 15 % sobre su carga instantánea.
-- **Regla práctica para el Token Bucket:** a un plan con ritmo sostenible *s* se le pueden permitir
-  ráfagas de unas **3,5 · s** durante 2 minutos (algo más si sus peticiones tienen respuestas
-  cortas).
+- **Fija los parámetros del cubo de fichas (*token bucket*) de SCALE.** Es la contribución
+  principal de esta parte y se explica en la sección 9.4.
 - **El ejemplo de la introducción del paper es muy conservador.** Una cuota de 30.000 peticiones
   cada 30 minutos con un ritmo de 1.400 por minuto implica B ≈ 1,4, frente al ≈ 3,5 medido.
   Conviene recalcular los ejemplos de las Tablas 1–3 con el valor medido.
@@ -460,18 +465,120 @@ sola moneda.
   factor)"*. El borrador está en [`latex/section_additivity_burst.tex`](latex/section_additivity_burst.tex),
   con sus tablas, figuras y macros.
 
-### 9.4. Activos para el artículo
+### 9.4. Contribución: el burst factor dimensiona el cubo de fichas de SCALE
+
+#### Qué es un cubo de fichas (*token bucket*)
+
+SCALE reparte la moneda Q con un cubo de fichas por usuario:
+
+- El cubo **se rellena a un ritmo fijo** *s* (por ejemplo, 100 Q por minuto). Es el **ritmo
+  sostenido** del plan y sale de la capacidad sostenible (MST).
+- Cada petición **gasta fichas** según su coste.
+- El cubo tiene un **tamaño máximo** *b*. Lo acumulado permite ir más rápido que *s* durante un rato
+  (una ráfaga) hasta vaciarlo; después, el usuario queda limitado al ritmo de relleno.
+
+El paper explica por qué usa este algoritmo (*"accommodates burst requests up to IK_max while
+enforcing the sustained rate limit"*), pero **no dice qué tamaño debe tener el cubo** ni cómo se
+traduce el umbral de seguridad IK_max a la moneda Q. El burst factor resuelve las dos cosas.
+
+#### Las tres reglas
+
+**Regla 1 · tamaño del cubo.** Si el servidor aguanta ráfagas de B·*s* durante W = 2 minutos, en ese
+tiempo el usuario gasta B·*s*·W fichas y recibe *s*·W. La diferencia tiene que estar ya en el cubo:
+
+```text
+b = (B − 1) · s · W   ≈   (3,5 − 1) · 2 · s   =   5 · s
+```
+
+**El cubo debe caber unos 5 minutos de relleno**, o 4,6 minutos con el valor conservador
+B = 3,29, que cubre el 90 % de los tipos de petición. Por ejemplo, un plan de 100 Q/min tendría un
+cubo de unas 500 Q: puede hacer ráfagas de 350 Q/min durante 2 minutos y luego vuelve a 100 Q/min
+mientras se rellena.
+
+**Regla 2 · umbral de seguridad en la misma moneda.** Como IK_r / SK_r = (IK_max / SK_max) / B, el
+umbral instantáneo se puede escribir en la moneda sostenible:
+
+```text
+Θ = B · SK_max   por minuto, promediado sobre los últimos 2 minutos
+```
+
+Para los tres despliegues sale 8.226 (DeepSeek), 7.297 (Gemma) y 7.717 (Llama) unidades por minuto.
+No hace falta una segunda contabilidad en IK: si el consumo total de los últimos 2 minutos supera Θ,
+se aplica el *throttling*.
+
+**Regla 3 · sobresuscripción segura frente a ráfagas.** Sobresuscripción y ráfagas se suman. Si se
+reparte ρ veces la capacidad y una fracción φ de la asignación hace una ráfaga a la vez (y el resto
+va a su ritmo), la carga instantánea es ρ·(φ·B + 1 − φ)·SK_max. No supera Θ si:
+
+```text
+ρ ≤ B / (1 + φ · (B − 1))
+```
+
+- Con **ρ = 1,2**, hasta un **77 %** de la asignación puede hacer ráfagas a la vez.
+- Si como mucho la mitad hace ráfagas a la vez, ρ podría llegar a **1,56**; si es un cuarto, a
+  **2,15**.
+- Si **todos** hacen ráfaga a la vez (φ = 1), solo es seguro ρ = 1.
+
+Esta regla convierte la "apuesta estadística" de la sobresuscripción en una **condición explícita
+sobre cuántos usuarios hacen ráfagas a la vez**, que el proveedor puede vigilar.
+
+#### Aplicado a los planes del paper (Tabla 3)
+
+Los planes del paper son de peticiones de hasta 300 tokens, cuyo burst factor es B ≈ 4,05:
+
+| Plan | ρ | Cuota (pet./30 min) | Ritmo *s* (pet./min) | Ráfaga según B (pet./2 min) | Cubo *b* (pet.) | Ráfaga en la Tabla 3 (pet./2 min) |
+| --- | --- | --- | --- | --- | --- | --- |
+| Basic | 1,0 | 50 | 1,67 | 14 | 10 | 70 |
+| Basic | 1,2 | 60 | 2,00 | 16 | 12 | 70 |
+| Pro | 1,0 | 175 | 5,83 | 47 | 36 | 245 |
+| Pro | 1,2 | 210 | 7,00 | 57 | 43 | 245 |
+
+Las ráfagas de la Tabla 3 equivalen a **21 veces** el ritmo sostenido, muy por encima de lo medido.
+Solo son seguras si las ráfagas casi nunca coinciden, y la Regla 3 permite cuantificar cuánto.
+Conviene rehacer la tabla con estos valores o justificar los suyos con esa regla.
+
+#### Cómo venderlo en el paper
+
+**La idea:** una constante medida y portable (B ≈ 3,5, igual en los tres modelos) **completa el
+control de admisión de SCALE**, que dejaba abiertos tres parámetros:
+
+1. el tamaño del cubo de cada plan;
+2. el umbral de *throttling* expresado en la moneda del usuario;
+3. un límite de sobresuscripción que tiene en cuenta las ráfagas.
+
+En la lista de contribuciones de la introducción se podría añadir:
+
+> *"the burst factor B = MIT/MST, a portable constant (≈ 3.5 on all three deployments), and three
+> rules derived from it that fix SCALE's admission control: token-bucket depth b = (B − 1)·s·W,
+> throttling threshold Θ = B·SK_max in the user-facing currency, and the burst-safe
+> oversubscription bound ρ ≤ B / (1 + φ(B − 1))."*
+
+**La cautela, como amenaza a la validez:** que B sea tan constante podría deberse en parte a cómo
+mide MoST (ventanas de 2 frente a 30 minutos y sus umbrales), no solo al hardware. Para separarlo,
+habría que repetir MIT con otra duración de ventana (1 o 5 minutos) en unas pocas clases. Si B cambia
+con la ventana, el 3,5 y la Regla 1 deben presentarse "para ventanas de 2 minutos".
+
+### 9.5. Activos para el artículo
 
 [`latex/`](latex/) contiene todo lo necesario para incorporar estos resultados al paper, en inglés:
 
-- [`macros.tex`](latex/macros.tex): 115 constantes con todos los valores citados (por ejemplo,
-  `\scaleQHatBayes` o `\scaleBurstMedian`), generadas a partir de los resultados. Si se recalcula
-  el análisis, el texto se actualiza solo.
-- [`tables/`](latex/tables/): 6 tablas con booktabs (leyes de combinación, sesgo por modelo, MIT
-  frente a MST, tipo pesado, burst factor resumido y por celda).
-- [`figures/`](latex/figures/): 4 figuras vectoriales en PDF a la medida de LNCS.
-- [`section_additivity_burst.tex`](latex/section_additivity_burst.tex): borrador de las
-  subsecciones RQ3 y RQ4 escrito con las macros.
+- [`macros.tex`](latex/macros.tex): 136 constantes con todos los valores citados (por ejemplo,
+  `\scaleQHatBayes`, `\scaleBurstMedian` o `\scaleTbDepth`), generadas a partir de los resultados.
+  Si se recalcula el análisis, el texto se actualiza solo.
+- [`tables/`](latex/tables/): 8 tablas con booktabs:
+  - leyes de combinación, sesgo por modelo, MIT frente a MST y tipo pesado;
+  - burst factor resumido y por celda;
+  - parámetros del cubo por despliegue y planes de la Tabla 3 rehechos.
+- [`figures/`](latex/figures/): 5 figuras vectoriales en PDF a la medida de LNCS, incluida la del
+  cubo de fichas y la frontera de sobresuscripción segura.
+- [`section_additivity_burst.tex`](latex/section_additivity_burst.tex): borrador escrito con las
+  macros, con tres subsecciones:
+  - RQ3 (aditividad);
+  - RQ4 (burst factor);
+  - *Sizing the token bucket from the burst factor*, redactada como contribución, con las tres
+    reglas, su aplicación a los planes y la amenaza a la validez.
+
+  En su cabecera incluye las viñetas propuestas para la lista de contribuciones de la introducción.
 - [`preview.pdf`](latex/preview.pdf): todo compilado con la clase LNCS, para revisarlo.
 
 ---

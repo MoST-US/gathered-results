@@ -212,3 +212,72 @@ def bayesian(d, units, draws=600, tune=600, chains=4, seed=20261005):
     from additivity_analysis import split_rhat
     return dict(per_model=per_model, cells=res_cells, pairs=pairs,
                 diagnostics=dict(divergences=div, max_rhat=split_rhat(idata.posterior["mu"].values)))
+
+
+# ------------------------------------------------------------------------ token-bucket sizing
+WINDOW_MIN = 2.0  # MIT window: bursts are characterised over 2 minutes
+PAPER_PLANS = {"Basic": 50, "Pro": 175}  # Table 3 of the SCALE draft: quota in requests per 30 min
+PAPER_RHO = 1.2
+PAPER_BURST_2M = {"Basic": 70, "Pro": 245}  # Table 3: burst rate in requests per 2 min (both columns)
+
+
+def bucket_depth_minutes(B, window=WINDOW_MIN):
+    """Depth of a token bucket, in minutes of refill, that lets a client sustain B times its refill
+    rate s for `window` minutes: it spends B*s*W, receives s*W, so b = (B - 1) * s * W."""
+    return (B - 1.0) * window
+
+
+def max_burst_share(B, rho):
+    """Largest share phi of the (oversubscribed) allocation that can burst simultaneously at B
+    times its rate while the others run at their sustainable rate, without exceeding the
+    instantaneous capacity B * SK_max:  rho * (phi * B + 1 - phi) <= B."""
+    return max(0.0, min(1.0, (B / rho - 1.0) / (B - 1.0)))
+
+
+def max_rho(B, phi):
+    """Largest oversubscription ratio that stays burst-safe when a share phi bursts at once."""
+    return B / (1.0 + phi * (B - 1.0))
+
+
+def token_bucket(burst, burst_bayes=None):
+    """Token-bucket parameters derived from the burst factor (Sec. 'Sizing the token bucket').
+
+    Three rules: (1) bucket depth b = (B - 1) s W; (2) throttling threshold, in the sustainable
+    currency, Theta = B * SK_max per minute averaged over W; (3) burst-safe oversubscription
+    rho <= B / (1 + phi (B - 1)). B_safe is the 10th percentile of the class burst factors, which
+    covers 90 % of the request classes."""
+    cells = pd.DataFrame(burst["cells"])
+    small = cells[cells.inp.isin(["1-100", "100-300"]) & cells.out.isin(["1-100", "100-300"])]
+    per_model = {}
+    for m, x in cells.groupby("model"):
+        Bm = float(burst_bayes["per_model"][m]["median"]) if burst_bayes else float(np.exp(x.logB.median()))
+        Bs = float(x.B.quantile(0.10))
+        skmax = float(x.mst.max())
+        per_model[m] = dict(B=Bm, B_safe=Bs, B_le300=float(small[small.model == m].B.median()),
+                            depth_min=bucket_depth_minutes(Bm), depth_min_safe=bucket_depth_minutes(Bs),
+                            sk_max=skmax, sk_max_cell=x.loc[x.mst.idxmax(), "cell"],
+                            throttle=Bm * skmax, throttle_safe=Bs * skmax,
+                            phi_max=max_burst_share(Bm, PAPER_RHO), phi_max_safe=max_burst_share(Bs, PAPER_RHO))
+    B = float(burst["overall"]["median"])
+    Bs = float(cells.B.quantile(0.10))
+    Bsmall = float(small.B.median())
+    plans = []
+    for name, quota in PAPER_PLANS.items():
+        for rho in (1.0, PAPER_RHO):
+            s = quota * rho / 30.0  # sustained rate, requests per minute
+            plans.append(dict(plan=name, rho=rho, quota_30m=quota * rho, s_per_min=s,
+                              burst_per_min=Bsmall * s, burst_per_2m=Bsmall * s * WINDOW_MIN,
+                              depth=bucket_depth_minutes(Bsmall) * s,
+                              burst_per_min_safe=Bs * s, depth_safe=bucket_depth_minutes(Bs) * s,
+                              paper_burst_per_2m=PAPER_BURST_2M[name]))
+    curve = [dict(phi=float(p), rho_max=max_rho(B, p), rho_max_safe=max_rho(Bs, p),
+                  rho_max_lo=max_rho(B / 1.15, p), rho_max_hi=max_rho(B * 1.15, p))
+             for p in np.linspace(0, 1, 51)]
+    return dict(window_min=WINDOW_MIN, B=B, B_safe=Bs, B_le300=Bsmall,
+                depth_min=bucket_depth_minutes(B), depth_min_safe=bucket_depth_minutes(Bs),
+                depth_min_le300=bucket_depth_minutes(Bsmall),
+                paper_rho=PAPER_RHO, phi_max=max_burst_share(B, PAPER_RHO),
+                phi_max_safe=max_burst_share(Bs, PAPER_RHO),
+                rho_max_half=max_rho(B, 0.5), rho_max_quarter=max_rho(B, 0.25),
+                paper_example_B=1.4, paper_table3_ratio=(70 / 2.0) / (50 / 30.0),
+                per_model=per_model, plans=plans, curve=curve)

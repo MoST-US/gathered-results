@@ -13,7 +13,6 @@ HERE = Path(__file__).resolve().parent
 PAIRS = [
     ("<title>Aditividad explicada</title>", "<title>Additivity Explained</title>"),
     ("MoST · capacidad de servidores LLM con mezclas de peticiones", "MoST · LLM serving capacity under request mixes"),
-    ("Aditividad, explicada en 9 escenas", "Additivity, explained in 9 scenes"),
     ("Por qué la capacidad de una mezcla se calcula sumando lo que ocupa cada petición, qué tal funciona con los datos reales de DeepSeek, Gemma y Llama, y dónde deja de funcionar. Cada escena se puede tocar: mueve los controles.",
      "Why the capacity of a request mix is obtained by adding up what each request occupies, how well that works with the real measurements of DeepSeek, Gemma and Llama, and where it stops working. Every scene is interactive: move the controls."),
     (">El servidor reparte su tiempo<", ">The server shares out its time<"),
@@ -138,6 +137,18 @@ PAIRS = [
     ('const DEC = ",";', 'const DEC = ".";'),
     ('const L9 = {median: "mediana", axis: "60 tipos de petición (3 modelos × 20), ordenados por burst factor = MIT / MST",\n  r1: "burst factor mediano de los 60 tipos", r2: "de los tipos a menos del 15 % de la mediana de su modelo",\n  r3: "respuestas cortas (1-100 tokens) / el resto"};',
      'const L9 = {median: "median", axis: "60 request types (3 models × 20), sorted by burst factor = MIT / MST",\n  r1: "median burst factor of the 60 types", r2: "of the types within 15 % of their model\'s median",\n  r3: "short answers (1-100 tokens) / the rest"};'),
+    # scene 10
+    (">El cubo de fichas de SCALE<", ">SCALE's token bucket<"),
+    ("Escena 10 · contribución", "Scene 10 · contribution"),
+    ("SCALE da a cada usuario un cubo de fichas (<i>token bucket</i>) que se rellena a su ritmo sostenido <i>s</i>. Una ráfaga gasta las fichas acumuladas. ¿Qué tamaño debe tener el cubo? Si el servidor aguanta ráfagas de B·<i>s</i> durante 2 minutos, el usuario gasta B·<i>s</i>·2 y recibe <i>s</i>·2: el cubo debe guardar (B − 1)·<i>s</i>·2, unos 5 minutos de relleno.",
+     "SCALE gives each user a <i>token bucket</i> that refills at their sustained rate <i>s</i>. A burst spends the stored tokens. How deep should the bucket be? If the server withstands bursts of B·<i>s</i> for 2 minutes, the user spends B·<i>s</i>·2 and receives <i>s</i>·2: the bucket must hold (B − 1)·<i>s</i>·2, about 5 minutes of refill."),
+    ("▶ Reproducir la ráfaga", "▶ Play the burst"),
+    ("></i>ritmo de peticiones</span>", "></i>request rate</span>"), ("></i>fichas en el cubo</span>", "></i>tokens in the bucket</span>"),
+    ("Una sola regla para todos los planes y modelos: cubo de unos 5 minutos de relleno, ráfagas de unas 3,5 veces el ritmo del plan, y un umbral de seguridad del servidor de unas 3,5 veces su capacidad sostenible, todo en la misma moneda Q.",
+     "One rule for every plan and model: a bucket of about 5 minutes of refill, bursts of about 3.5 times the plan's rate, and a server safety threshold of about 3.5 times its sustainable capacity, all in the same currency Q."),
+    ('const L10 = {bucket: "cubo", s: "ritmo sostenido s", burst: "ráfaga", r1: "ritmo de ráfaga permitido durante 2 minutos",\n  r2: "tamaño del cubo (minutos de relleno)", r3: "de la asignación puede hacer ráfaga a la vez con ρ = 1,2"};',
+     'const L10 = {bucket: "bucket", s: "sustained rate s", burst: "burst", r1: "burst rate allowed for 2 minutes",\n  r2: "bucket depth (minutes of refill)", r3: "of the allocation may burst at once with ρ = 1.2"};'),
+    ("Aditividad, explicada en 10 escenas", "Additivity, explained in 10 scenes"),
     # formatting and fallback
     ('toLocaleString("es-ES")', 'toLocaleString("en-US")'),
     ('Math.abs(q).toFixed(2).replace(".", ",")', 'Math.abs(q).toFixed(2)'),

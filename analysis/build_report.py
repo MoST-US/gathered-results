@@ -105,6 +105,8 @@ def main(out_dir, html_path):
                        rows=[dict(model=r["model"], label=r["label"], obs=float(np.exp(r["logB_obs"])),
                                   pred=float(np.exp(r["logB_pred"])), heavy=bool(r["heavy"]))
                              for r in bu["mixes"]["rows"]]))
+    if res.get("token_bucket"):
+        data["tb"] = res["token_bucket"]
     tpl = (HERE / "report_template.html").read_text(encoding="utf-8")
     html = tpl.replace("/*__DATA__*/null", json.dumps(data, separators=(",", ":"), default=float))
     Path(html_path).write_text(html, encoding="utf-8")
