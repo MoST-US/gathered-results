@@ -1,0 +1,9 @@
+# Versions used to produce the published results (Python 3.14, Windows 11; also tested on Linux CI).
+numpy==2.5.4
+pandas==3.0.6
+scipy==1.18.1
+statsmodels==0.15.0
+pymc==6.3.2
+pytensor==3.3.4
+arviz==1.3.0
+matplotlib==3.11.2

@@ -1,0 +1,16 @@
+% MIT (2-min) versus MST (30-min): same law, different precision. Design-level unless noted.
+\begin{tabular}{lccl}
+\toprule
+ & MIT & MST & Test \\
+\midrule
+Mean bias & \ensuremath{-}2.9\,\% & \ensuremath{-}3.1\,\% & p = 0.507 \\
+Mean absolute error & 10\,\% & 23\,\% & p = 0.020 \\
+SD of log error & 0.12 & 0.30 & Levene p = 0.0005 \\
+Within $\pm$10\,\%, all mixes & 61\,\% & 48\,\% &  \\
+Within $\pm$10\,\%, without heavy class & 75\,\% & 58\,\% & Levene p = 0.007 \\
+Within $\pm$10\,\%, with heavy class & 42\,\% & 25\,\% &  \\
+$\sigma_{\mathrm{rep}}$ (repeat pure cell) & 0.3\,\% & 1.7\,\% &  \\
+$\sigma_{\mathrm{run}}$ (repeat mix design) & 0.3\,\% & 1.8\,\% &  \\
+$\sigma_{\mathrm{mix}}$ (design departure) & 6\,\% & 21\,\% &  \\
+\bottomrule
+\end{tabular}

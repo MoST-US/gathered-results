@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this data or analysis, please cite the SCALE paper and this artifact."
+title: "SCALE replication artifact: MoST measurements, additivity of Capacity Units and burst factor"
+type: dataset
+# TODO before the camera-ready release: complete the author list and add the licence
+# (keep the deposit anonymous while the paper is under double-blind review).
+authors:
+  - family-names: Parejo
+    given-names: José Antonio
+repository-code: "https://github.com/MoST-US/gathered-results"
+url: "https://most-us.github.io/gathered-results/"
+keywords:
+  - LLMaaS
+  - capacity planning
+  - throughput
+  - MoST
+  - SCALE
+  - oversubscription

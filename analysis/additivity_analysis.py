@@ -560,8 +560,11 @@ def main():
            "duplicate_units_removed": d.attrs.get("duplicate_units", 0),
            "non_monotone_pure": int((~units[~units.is_mix].monotone).sum()),
            "mix_rows": fm.drop(columns=["mu", "p"]).to_dict("records")}
+    import burst_analysis
+    res["burst"] = burst_analysis.frequentist(units, fm)
     if not args.skip_bayes:
         res["bayes"] = bayesian(d, units, draws=args.draws, tune=args.draws)
+        res["burst_bayes"] = burst_analysis.bayesian(d, units, draws=args.draws, tune=args.draws)
     (out / "results.json").write_text(json.dumps(res, indent=1, default=float))
     print(json.dumps({k: v for k, v in freq.items() if k not in ("cells",)}, indent=1, default=float))
 

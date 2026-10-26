@@ -1,6 +1,6 @@
 """Build the didactic animations page (Spanish) from the additivity analysis output.
 
-Usage: python analysis/build_animations.py <analysis out dir> <output html>
+Usage: python analysis/build_animations.py <analysis out dir> <output html> [es|en]
 
 Only frequentist per-run results (mix_frequentist.csv) are needed: the page uses real
 capacities, mixes and repeated runs; the SLA and KV-cache scenes are illustrations whose inputs
@@ -18,7 +18,7 @@ HERE = Path(__file__).resolve().parent
 HEAVY = "600-1000_1000-1500"
 
 
-def main(out_dir, html_path):
+def main(out_dir, html_path, lang="es"):
     fm = pd.read_csv(Path(out_dir) / "mix_frequentist.csv")
     fm["mu"] = fm.mu.map(ast.literal_eval)
     fm["p"] = fm.p.map(ast.literal_eval)
@@ -55,14 +55,24 @@ def main(out_dir, html_path):
                                 label=g.label.iloc[0], dev=round(float(np.log(c) - med), 4),
                                 n=len(g)))
 
-    data = dict(pair=dict(model="DeepSeek-R1-Qwen-7B", kind="MIT", c_light=float(caps["1-100_1-100"]),
+    burst = None
+    rj = Path(out_dir) / "results.json"
+    if rj.exists():
+        R = json.loads(rj.read_text())
+        if R.get("burst"):
+            med = {m: v["median"] for m, v in R["burst"]["per_model"].items()}
+            burst = [dict(model=c["model"], inp=c["inp"], out=c["out"], B=round(c["B"], 3), mit=round(c["mit"], 1),
+                          mst=round(c["mst"], 1), model_median=round(med[c["model"]], 3)) for c in R["burst"]["cells"]]
+
+    data = dict(burst=burst, pair=dict(model="DeepSeek-R1-Qwen-7B", kind="MIT", c_light=float(caps["1-100_1-100"]),
                           c_heavy=float(caps[HEAVY]), points=pair_pts),
                 designs=designs, repeats=repeats)
-    tpl = (HERE / "animations_template.html").read_text(encoding="utf-8")
+    name = "animations_template_en.html" if lang == "en" else "animations_template.html"
+    tpl = (HERE / name).read_text(encoding="utf-8")
     html = tpl.replace("/*__DATA__*/null", json.dumps(data, separators=(",", ":")))
     Path(html_path).write_text(html, encoding="utf-8")
     print("wrote", html_path, len(html) // 1024, "KB,", len(designs), "designs,", len(repeats), "repeat runs")
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:3])
+    main(*sys.argv[1:4])

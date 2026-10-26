@@ -89,6 +89,22 @@ def main(out_dir, html_path):
     data["meta"]["repeated_designs"] = int(sum(v["designs"] for v in freq.get("mix_replicates", {}).values()))
     data["bounds_out"] = [dict(model=r.model, kind=r.kind, label=r.label, ratio=float(r.c_obs / r.cmin))
                           for _, r in fm[~fm.in_minmax].iterrows()]
+    bu, bb = res.get("burst"), res.get("burst_bayes")
+    if bu:
+        bcells = {(c["model"], c["cell"]): c for c in (bb or {}).get("cells", [])}
+        data["burst"] = dict(
+            cells=[dict(model=c["model"], inp=c["inp"], out=c["out"], B=round(c["B"], 3), mit=round(c["mit"], 1),
+                        mst=round(c["mst"], 1), dev=round(c["dev"], 4),
+                        lo=round(bcells[(c["model"], c["cell"])]["ci95"][0], 3) if bcells else None,
+                        hi=round(bcells[(c["model"], c["cell"])]["ci95"][1], 3) if bcells else None)
+                   for c in bu["cells"]],
+            per_model={m: dict(freq=v, bayes=(bb or {}).get("per_model", {}).get(m)) for m, v in bu["per_model"].items()},
+            overall=bu["overall"], anova=bu["anova"], anova_robust=bu["anova_robust"],
+            short=bu["short_output"], pairs=(bb or {}).get("pairs", []),
+            mixes=dict({k: v for k, v in bu["mixes"].items() if k != "rows"},
+                       rows=[dict(model=r["model"], label=r["label"], obs=float(np.exp(r["logB_obs"])),
+                                  pred=float(np.exp(r["logB_pred"])), heavy=bool(r["heavy"]))
+                             for r in bu["mixes"]["rows"]]))
     tpl = (HERE / "report_template.html").read_text(encoding="utf-8")
     html = tpl.replace("/*__DATA__*/null", json.dumps(data, separators=(",", ":"), default=float))
     Path(html_path).write_text(html, encoding="utf-8")

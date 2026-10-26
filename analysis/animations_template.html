@@ -69,7 +69,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 <div class="wrap">
 <header>
   <div class="eyebrow">MoST · capacidad de servidores LLM con mezclas de peticiones</div>
-  <h1>Aditividad, explicada en 8 escenas</h1>
+  <h1>Aditividad, explicada en 9 escenas</h1>
   <p class="lede">Por qué la capacidad de una mezcla se calcula sumando lo que ocupa cada petición, qué tal funciona con los datos reales de DeepSeek, Gemma y Llama, y dónde deja de funcionar. Cada escena se puede tocar: mueve los controles.</p>
   <nav><ol>
     <li><a href="#s1">El servidor reparte su tiempo</a></li>
@@ -80,6 +80,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
     <li><a href="#s6">Peticiones pesadas y memoria</a></li>
     <li><a href="#s7">El SLA agregado tapa a las lentas</a></li>
     <li><a href="#s8">Las repeticiones son estables</a></li>
+    <li><a href="#s9">Las ráfagas: 3,5 veces durante dos minutos</a></li>
   </ol></nav>
 </header>
 
@@ -216,6 +217,20 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
     <div class="readout" id="s8-read"></div>
   </figure>
   <p class="take">Las pocas ejecuciones que se apartan mucho pertenecen a diseños con peticiones pesadas: la inestabilidad tiene una causa concreta, no es ruido general.</p>
+</section>
+
+<!-- 9 -->
+<section class="scene" id="s9">
+  <div class="eyebrow">Escena 9 · datos reales</div>
+  <h2>Las ráfagas: 3,5 veces durante dos minutos</h2>
+  <p class="idea">El <i>burst factor</i> de un tipo de petición es MIT / MST: cuántas veces su ritmo sostenible (la prueba de 30 minutos) aguanta el servidor durante una ráfaga de 2 minutos. Cada barra es uno de los 60 tipos de petición de los tres modelos, ordenados de menor a mayor.</p>
+  <figure>
+    <div class="controls"><button class="btn" id="s9-play">▶ Repetir la animación</button></div>
+    <div class="legend"><span><i style="background:var(--light)"></i>a menos del 15 % de la mediana de su modelo</span><span><i style="background:var(--heavy)"></i>más lejos</span><span><i style="background:var(--band-2)"></i>mediana ± 15 %</span></div>
+    <div class="chart" id="s9-chart"></div>
+    <div class="readout" id="s9-read"></div>
+  </figure>
+  <p class="take">Casi todos los tipos de petición aguantan ráfagas de unas 3,5 veces su ritmo sostenible, y el valor es prácticamente el mismo en los tres modelos. Por eso una sola moneda basada en MST sirve también para las ráfagas: basta con permitir unas 3,5 veces el ritmo del plan durante 2 minutos.</p>
 </section>
 </div>
 <div class="tip" id="tip" hidden></div>
@@ -496,8 +511,40 @@ function s8() {
 }
 $("s8-play").addEventListener("click", s8);
 
+/* ---------- 9: burst factor ---------- */
+function s9() {
+  const C = [...D.burst].sort((a, b) => a.B - b.B);
+  const med = d3.median(C, d => d.B);
+  const {svg, W, H} = svgIn("s9-chart", 260);
+  const m = {l: 40, r: 12, t: 14, b: 34};
+  const x = d3.scaleBand().domain(C.map((d, i) => i)).range([m.l, W - m.r]).padding(0.18);
+  const top = 7;
+  const y = d3.scaleLinear().domain([0, top]).range([H - m.b, m.t]);
+  svg.append("rect").attr("x", m.l).attr("width", W - m.r - m.l).attr("y", y(med * 1.15)).attr("height", y(med / 1.15) - y(med * 1.15)).attr("fill", css("--band-2"));
+  [1, 2, 3, 4, 5, 6, 7].forEach(v => svg.append("line").attr("x1", m.l).attr("x2", W - m.r).attr("y1", y(v)).attr("y2", y(v)).attr("stroke", css("--grid")));
+  svg.append("g").selectAll("rect").data(C).join("rect").attr("x", (d, i) => x(i)).attr("width", x.bandwidth()).attr("rx", 1.5)
+    .attr("fill", d => css(Math.abs(Math.log(d.B / d.model_median)) < Math.log(1.15) ? "--light" : "--heavy"))
+    .attr("y", y(0)).attr("height", 0)
+    .on("mouseenter", (ev, d) => showTip(ev, `<b>${d.model}</b><br><span style="font-family:var(--f-mono);font-size:.74rem">${d.inp} → ${d.out}</span><br>B = ${d.B.toFixed(2).replace(".", DEC)} · MIT ${nf(d.mit)} · MST ${nf(d.mst)}`)).on("mousemove", moveTip).on("mouseleave", hideTip)
+    .transition().delay((d, i) => T(i * 25)).duration(T(500)).attr("y", d => y(Math.min(top, d.B))).attr("height", d => y(0) - y(Math.min(top, d.B)));
+  C.filter(d => d.B > top).forEach(d => { const i = C.indexOf(d); txt(svg, x(i) + x.bandwidth() / 2, y(top) - 3, d.B.toFixed(1).replace(".", DEC), {a: "middle", c: "--ink", s: 10, w: 600}); });
+  svg.append("line").attr("x1", m.l).attr("x2", W - m.r).attr("y1", y(med)).attr("y2", y(med)).attr("stroke", css("--accent")).attr("stroke-width", 2);
+  txt(svg, m.l + 6, y(med) - 6, L9.median + " " + med.toFixed(2).replace(".", DEC), {c: "--accent", w: 600, s: 11.5});
+  const ay = svg.append("g").attr("transform", `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(7).tickSizeOuter(0)); axisStyle(ay);
+  txt(svg, (m.l + W - m.r) / 2, H - 8, L9.axis, {a: "middle", c: "--muted", s: 11});
+  const on = C.filter(d => Math.abs(Math.log(d.B / d.model_median)) < Math.log(1.15)).length;
+  const short = C.filter(d => d.out === "1-100"), rest = C.filter(d => d.out !== "1-100");
+  const gm = a => Math.exp(d3.mean(a, d => Math.log(d.B)));
+  $("s9-read").innerHTML = `<div><b>${med.toFixed(2).replace(".", DEC)}</b><span>${L9.r1}</span></div><div><b>${Math.round(100 * on / C.length)} %</b><span>${L9.r2}</span></div><div><b>${gm(short).toFixed(2).replace(".", DEC)} / ${gm(rest).toFixed(2).replace(".", DEC)}</b><span>${L9.r3}</span></div>`;
+}
+const DEC = ",";
+const L9 = {median: "mediana", axis: "60 tipos de petición (3 modelos × 20), ordenados por burst factor = MIT / MST",
+  r1: "burst factor mediano de los 60 tipos", r2: "de los tipos a menos del 15 % de la mediana de su modelo",
+  r3: "respuestas cortas (1-100 tokens) / el resto"};
+$("s9-play").addEventListener("click", s9);
+
 /* ---------- boot ---------- */
-function drawAll() { s1(); s2(); $("s3-chart").innerHTML = ""; s3(); $("s4-chart").innerHTML = ""; s4(false); s5(); s6(); s7(); s8(); }
+function drawAll() { s1(); s2(); $("s3-chart").innerHTML = ""; s3(); $("s4-chart").innerHTML = ""; s4(false); s5(); s6(); s7(); s8(); if (D.burst) s9(); else $("s9").hidden = true; }
 if (!D || !window.d3) { document.querySelector(".wrap").insertAdjacentHTML("afterbegin", "<p>No se han podido cargar los datos o la librería de gráficos.</p>"); }
 else {
   s4init(); drawAll();

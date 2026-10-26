@@ -214,6 +214,28 @@ ul.tight { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; color: var(-
   <div class="tbl"><table id="stable"></table></div>
 </section>
 
+<section id="burst-section">
+  <div class="sec-head prose">
+    <div class="eyebrow">Figure 7</div>
+    <h2>The burst factor is almost the same everywhere</h2>
+    <p>The burst factor of a request class is B = MIT / MST: how many times its sustainable rate (30-minute MST test) a client can reach during a 2-minute burst (MIT test). SCALE prices requests with the sustainable capacity and keeps the instantaneous one as a safety threshold. Both price classes the same way only if B is the same for every class.</p>
+  </div>
+  <figure>
+    <div class="chart" id="figB"></div>
+    <figcaption id="capB"></figcaption>
+  </figure>
+  <div class="two">
+    <figure>
+      <div class="chart" id="figBm"></div>
+      <figcaption id="capBm"></figcaption>
+    </figure>
+    <figure>
+      <div class="tbl"><table id="btable"></table></div>
+      <figcaption id="capBt"></figcaption>
+    </figure>
+  </div>
+</section>
+
 <section>
   <div class="sec-head prose"><div class="eyebrow">Inference tables</div><h2>Frequentist tests</h2>
   <p>These tests use the log-ratio r = log(C<sub>mix</sub> / Ĉ<sub>law</sub>), averaged over the repeated runs of each mix design, so each design counts once (n = designs). TOST tests equivalence to zero within ±10 %, so a small p means the bias is practically negligible. The random-effects estimate (DerSimonian–Laird) weights each run by its measurement precision and reports the heterogeneity τ and I².</p></div>
@@ -587,7 +609,67 @@ function stable() {
 function seg(prefix, keys, onSel) {
   keys.forEach(k => $(prefix + k).addEventListener("click", () => { keys.forEach(j => $(prefix + j).setAttribute("aria-pressed", j === k)); onSel(k); }));
 }
-function drawAll() { fig1(); fig2a(); fig2b(); fig3(); fig4(); fig5(); fig6(); fig7(); }
+/* ---------- Fig 7: burst factor ---------- */
+const IN_R = ["1-100", "100-300", "300-600", "600-1000"], OUT_R = ["1-100", "100-300", "300-600", "600-1000", "1000-1500"];
+function figBurst() {
+  if (!R.burst) { $("burst-section").hidden = true; return; }
+  const Bu = R.burst;
+  const wrap = $("figB"); wrap.innerHTML = "";
+  const W = Math.max(300, wrap.clientWidth), per = W >= 720 ? 3 : 1;
+  const pw = per === 3 ? (W - 40) / 3 : W, cw = (pw - 64) / OUT_R.length, ch = 26;
+  const H = per === 3 ? IN_R.length * ch + 70 : 3 * (IN_R.length * ch + 70);
+  const svg = d3.select(wrap).append("svg").attr("viewBox", `0 0 ${W} ${H}`).attr("role", "img");
+  const col = d3.scaleSequential(d3.interpolateBlues).domain([2.6, 6.2]);
+  MODELS.forEach((m, j) => {
+    const ox = per === 3 ? j * (pw + 20) : 0, oy = per === 3 ? 0 : j * (IN_R.length * ch + 70);
+    const g = svg.append("g").attr("transform", `translate(${ox + 56},${oy + 22})`);
+    label(svg, ox + 56, oy + 14, m, {w: 600, c: "--ink", s: 12});
+    const cells = Bu.cells.filter(c => c.model === m);
+    IN_R.forEach((inp, r) => OUT_R.forEach((o, c) => {
+      const d = cells.find(x => x.inp === inp && x.out === o); if (!d) return;
+      const y = (IN_R.length - 1 - r) * ch;
+      g.append("rect").attr("x", c * cw + 1).attr("y", y + 1).attr("width", cw - 2).attr("height", ch - 2).attr("rx", 2)
+        .attr("fill", col(Math.min(6.2, d.B)))
+        .on("mouseenter", ev => showTip(ev, `<div class="t">${m}</div><div class="mono">${inp} in → ${o} out</div><div><span class="k">B</span> <b>${d.B.toFixed(2)}</b>${d.lo ? ` [${d.lo.toFixed(2)}, ${d.hi.toFixed(2)}] 95 %` : ""}</div><div><span class="k">MIT</span> ${fmtN(d.mit)} · <span class="k">MST</span> ${fmtN(d.mst)} req/min</div><div><span class="k">vs model median</span> ${pct(d.dev)}</div>`)).on("mousemove", moveTip).on("mouseleave", hideTip);
+      g.append("text").attr("x", c * cw + cw / 2).attr("y", y + ch / 2 + 4).attr("text-anchor", "middle").attr("pointer-events", "none")
+        .attr("fill", d.B > 4.6 ? "#fff" : "#111").style("font", `${Math.abs(d.dev) > Math.log(1.15) ? 700 : 400} 10.5px ${css("--f-mono")}`).text(d.B.toFixed(1));
+    }));
+    IN_R.forEach((inp, r) => label(svg, ox + 52, oy + 22 + (IN_R.length - 1 - r) * ch + ch / 2 + 4, inp, {a: "end", c: "--muted", s: 10, f: "--f-mono"}));
+    OUT_R.forEach((o, c) => label(svg, ox + 56 + c * cw + cw / 2, oy + 22 + IN_R.length * ch + 14, o, {a: "middle", c: "--muted", s: 9.5, f: "--f-mono"}));
+    label(svg, ox + 56 + OUT_R.length * cw / 2, oy + 22 + IN_R.length * ch + 30, "output tokens  (rows: input tokens)", {a: "middle", c: "--muted", s: 10.5});
+  });
+  const o = Bu.overall, pm = Bu.per_model;
+  const bayesTxt = MODELS.map(m => pm[m].bayes ? `${m} ${pm[m].bayes.median.toFixed(2)} [${pm[m].bayes.ci95[0].toFixed(2)}, ${pm[m].bayes.ci95[1].toFixed(2)}]` : `${m} ${pm[m].freq.median.toFixed(2)}`).join("; ");
+  $("capB").innerHTML = `<b>Burst factor per request class.</b> Median ${o.median.toFixed(2)} over the ${o.n} classes (IQR ${o.q1.toFixed(2)}–${o.q3.toFixed(2)}); ${pctr(o.on_band)} of the classes are within ±15 % of their model's median (bold labels are outside). Per-model medians (Bayesian 95 % CrI): ${bayesTxt}. The model has no detectable effect (ANOVA p = ${Bu.anova["C(model)"].p.toFixed(2)}). Short answers (1–100 output tokens) tolerate larger bursts: B = ${Bu.short.B_short.toFixed(2)} versus ${Bu.short.B_rest.toFixed(2)} (p = ${fmtP(Bu.short.p_mw)}). Gemma's two long-input, long-output cells (up to ${pm["Gemma-7B"].freq.max.toFixed(1)}) coincide with the MST anomaly discussed in the caveats.`;
+
+  // mixes
+  const rows = Bu.mixes.rows;
+  const {svg: s2, W: W2, H: H2} = svgIn("figBm", 300);
+  const m2 = {l: 50, r: 14, t: 12, b: 42};
+  const x = d3.scaleLinear().domain([2.8, 7]).range([m2.l, W2 - m2.r]), y = d3.scaleLinear().domain([2.8, 7]).range([H2 - m2.b, m2.t]);
+  gridY(s2, y, m2.l, W2 - m2.r, [3, 4, 5, 6, 7]); gridX(s2, x, m2.t, H2 - m2.b, [3, 4, 5, 6, 7]);
+  s2.append("path").attr("d", d3.area().x(v => x(v)).y0(v => y(Math.max(2.8, v / 1.15))).y1(v => y(Math.min(7, v * 1.15)))(d3.range(2.8, 7.01, 0.1))).attr("fill", css("--band-2"));
+  s2.append("line").attr("x1", x(2.8)).attr("y1", y(2.8)).attr("x2", x(7)).attr("y2", y(7)).attr("stroke", css("--accent")).attr("stroke-dasharray", "4 3");
+  s2.append("g").selectAll("circle").data(rows).join("circle").attr("cx", d => x(d.pred)).attr("cy", d => y(Math.min(7, d.obs))).attr("r", 5.5)
+    .attr("fill", d => col_(d.model)).attr("stroke", css("--surface")).attr("stroke-width", 1.5)
+    .on("mouseenter", (ev, d) => showTip(ev, `<div class="t">${d.model}</div><div class="mono" style="font-size:.74rem">${d.label}</div><div><span class="k">B measured</span> ${d.obs.toFixed(2)} · <span class="k">predicted</span> ${d.pred.toFixed(2)}</div>`)).on("mousemove", moveTip).on("mouseleave", hideTip);
+  const ax = s2.append("g").attr("transform", `translate(0,${H2 - m2.b})`).call(d3.axisBottom(x).ticks(5).tickSizeOuter(0)); axisStyle(ax);
+  const ay = s2.append("g").attr("transform", `translate(${m2.l},0)`).call(d3.axisLeft(y).ticks(5).tickSizeOuter(0)); axisStyle(ay);
+  label(s2, (m2.l + W2 - m2.r) / 2, H2 - 8, "B predicted from the classes (harmonic MIT / harmonic MST)", {a: "middle", c: "--muted", s: 10.5});
+  s2.append("text").attr("transform", `translate(13,${(m2.t + H2 - m2.b) / 2}) rotate(-90)`).attr("text-anchor", "middle").attr("fill", css("--muted")).style("font", "11px " + css("--f-body")).text("B measured");
+  $("capBm").innerHTML = `<b>Burst factor of mixes</b> measured with the same composition in both tests (${Bu.mixes.n} designs; colours: models as in Figure 1; band: ±15 %). Measured B exceeds the prediction by ${pct(Bu.mixes.mean_err, 0)} on average, because mixes fall further below the additive law in MST than in MIT.`;
+
+  // table
+  const head = ["Model", "Median B", "IQR", "Within ±15 %"];
+  $("btable").innerHTML = `<thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>` + MODELS.map(m => {
+    const f = pm[m].freq, b = pm[m].bayes;
+    return `<tr><td>${m}</td><td>${b ? `${b.median.toFixed(2)} [${b.ci95[0].toFixed(2)}, ${b.ci95[1].toFixed(2)}]` : f.median.toFixed(2)}</td><td>${f.q1.toFixed(2)}–${f.q3.toFixed(2)}</td><td>${pctr(f.on_band)}</td></tr>`;
+  }).join("") + `<tr><td>All classes</td><td>${o.median.toFixed(2)}</td><td>${o.q1.toFixed(2)}–${o.q3.toFixed(2)}</td><td>${pctr(o.on_band)}</td></tr></tbody>`;
+  const pr = Bu.pairs || [];
+  $("capBt").innerHTML = pr.length ? `<b>Portability.</b> The posterior ratio between the burst factors of any two models lies within ${pct(d3.max(pr, p => Math.max(Math.abs(Math.log(p.ci95[0])), Math.abs(Math.log(p.ci95[1])))), 1).replace("+", "")} of one (95 % CrI), and the probability that they are equivalent within ±10 % is at least ${pctr(d3.min(pr, p => p.p_equiv))}. For SCALE, a plan with sustainable rate s can be granted bursts of about ${o.median.toFixed(1)}·s over 2-minute windows.` : "";
+}
+const col_ = m => col(m);
+function drawAll() { fig1(); fig2a(); fig2b(); fig3(); fig4(); fig5(); fig6(); fig7(); figBurst(); }
 function boot() {
   if (!R || !window.d3) { document.querySelector(".wrap").insertAdjacentHTML("afterbegin", "<p>Chart data or library failed to load.</p>"); return; }
   text(); modelLegend("legend1"); modelLegend("legend4"); modelLegend("legend5"); tables(); mtable(); stable(); drawAll();

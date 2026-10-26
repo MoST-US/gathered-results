@@ -1,0 +1,14 @@
+% Mean departure from the harmonic law with and without the heaviest class (600-1000 in, 1000-1500 out).
+\begin{tabular}{lrrrr}
+\toprule
+ & \multicolumn{2}{c}{Without heavy class} & \multicolumn{2}{c}{With heavy class} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+Model & MIT & MST & MIT & MST \\
+\midrule
+DeepSeek-R1-Distill-Qwen-7B & \ensuremath{-}4\,\% & \ensuremath{-}1\,\% & \ensuremath{-}12\,\% & \ensuremath{-}8\,\% \\
+Gemma-7B & \ensuremath{-}1\,\% & \ensuremath{-}10\,\% & +16\,\% & +64\,\% \\
+Llama-3.1-8B-Instruct & \ensuremath{-}5\,\% & \ensuremath{-}9\,\% & \ensuremath{-}9\,\% & \ensuremath{-}24\,\% \\
+\midrule
+ANOVA model effect & \multicolumn{2}{c}{p = 0.544} & \multicolumn{2}{c}{all mixes: p = 0.0007} \\
+\bottomrule
+\end{tabular}

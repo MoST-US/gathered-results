@@ -10,9 +10,11 @@ Interpretación del análisis de aditividad y acotabilidad sobre el archivo `MIT
 > toma cada diseño de mezcla como unidad (las repeticiones se promedian). La sección 6 resume el
 > análisis bayesiano, que llega a las mismas conclusiones.
 >
-> **Para verlo de forma intuitiva:** [`report/animaciones.html`](report/animaciones.html) tiene 8
-> escenas interactivas que ilustran cada idea de este documento. El informe con todas las figuras
-> y tablas está en [`report/additivity-report.html`](report/additivity-report.html).
+> **Para verlo de forma intuitiva:** [`docs/animaciones.html`](../docs/animaciones.html) tiene 9
+> escenas interactivas que ilustran cada idea de este documento (en inglés:
+> [`docs/animations.html`](../docs/animations.html)). El informe con todas las figuras y tablas
+> está en [`docs/report.html`](../docs/report.html), y los activos para el artículo en LaTeX, en
+> [`latex/`](latex/).
 
 ---
 
@@ -54,7 +56,7 @@ Si el servidor aguanta 11.000 peticiones cortas por minuto, cada petición corta
 servidor durante un minuto. Si aguanta 360 largas, cada larga ocupa 1/360, unas 30 veces más. Para
 una mezcla se calcula lo que ocupa de media una petición y se le da la vuelta:
 
-```
+```text
 1 / C_mezcla  =  p₁ / C₁  +  p₂ / C₂  +  ...
 ```
 
@@ -241,7 +243,7 @@ capacidad estimada de las celdas puras.
 | --- | --- | --- |
 | Repetir una celda pura | 0,3 % | 1,7 % |
 | Repetir un mismo diseño de mezcla | 0,3 % | 1,8 % |
-| Desviación propia de cada diseño respecto a la regla | 6 % | 19 % |
+| Desviación propia de cada diseño respecto a la regla | 6 % | 21 % |
 
 Esto confirma que **las repeticiones son muy estables** y que lo que se desvía es el diseño, no la
 medida.
@@ -286,7 +288,7 @@ SCALE"* (ICSOC 2026) y propone cómo usarlos para mejorarlo.
 En la sección 4, el paper define el coste de una petición como el inverso de la capacidad de su
 clase:
 
-```
+```text
 K_r = SK_max / MST_r
 ```
 
@@ -294,7 +296,7 @@ SCALE cobra a cada usuario Q (proporcional a K) por cada petición y vigila que 
 minuto no supere SK_max. Esto solo es correcto si **los K de distintas clases se suman** cuando se
 mezclan. Esa suposición es exactamente la regla armónica:
 
-```
+```text
 Σ pᵢ · Kᵢ ≤ SK_max   ⟺   C_mezcla = 1 / Σ (pᵢ / MSTᵢ)
 ```
 
@@ -401,7 +403,80 @@ aclarar qué datos alimentan cada figura y, si hace falta, unificar las fuentes.
 6. **Related work:** situar K en la tradición del análisis operacional y de la caracterización de
    rendimiento con medias armónicas.
 
-## 9. Siguientes pasos
+## 9. El burst factor: cuánto aguantan las ráfagas
+
+### 9.1. Qué es
+
+MoST mide dos capacidades para cada tipo de petición:
+
+- **MST:** el ritmo sostenible durante 30 minutos.
+- **MIT:** el ritmo que aguanta durante una ráfaga de 2 minutos.
+
+El **burst factor** es su cociente:
+
+```text
+B_r = MIT_r / MST_r
+```
+
+Indica cuántas veces su ritmo sostenible puede alcanzar un cliente durante una ráfaga de 2 minutos.
+
+**Por qué importa para SCALE.** SCALE cobra con una sola moneda (Q), basada en la capacidad
+sostenible (SK), y usa la capacidad instantánea (IK) solo como umbral de seguridad para las ráfagas.
+Como IK_r / SK_r = (IK_max / SK_max) / B_r, las dos contabilidades tratan igual a todos los tipos de
+petición **solo si B es el mismo para todos**. Un burst factor constante es lo que justifica usar una
+sola moneda.
+
+### 9.2. Resultados
+
+- **Es prácticamente constante.** La mediana es **3,50** en los 60 tipos de petición de los tres
+  modelos (rango intercuartílico 3,41–3,94). Por modelo sale 3,57 en DeepSeek, 3,56 en Gemma y 3,55
+  en Llama (análisis bayesiano, intervalos del 95 % entre 3,48 y 3,65).
+- **No depende del modelo** (ANOVA p = 0,74). La razón entre los burst factors de dos modelos
+  cualesquiera está a menos de un 3,5 % de 1, con probabilidad ≈ 1 de ser equivalentes dentro de
+  ±10 %.
+- **El 77 %** de los tipos de petición quedan a menos de ±15 % de la mediana de su modelo.
+- **Excepciones sistemáticas:**
+  - Las respuestas cortas (1–100 tokens) aguantan ráfagas algo mayores: B = 4,15 frente a 3,68
+    (+13 %, p = 0,0004).
+  - Las dos celdas de Gemma con prompt largo y respuesta larga llegan a B = 6 y 11,6. Coinciden con
+    la anomalía del SLA en MST (sección 4): su MST es anormalmente bajo, no su MIT alto.
+- **En mezclas**, el burst factor medido es un ~19 % mayor que el que se predice a partir de sus
+  tipos. Se debe a que la regla armónica se cumple peor en MST que en MIT (sección 3.4).
+
+### 9.3. Qué significa para SCALE y para el paper
+
+- **Una sola moneda es suficiente.** Para el 77 % de los tipos, cobrar las ráfagas con la moneda
+  sostenible se equivoca en menos de un 15 % sobre su carga instantánea.
+- **Regla práctica para el Token Bucket:** a un plan con ritmo sostenible *s* se le pueden permitir
+  ráfagas de unas **3,5 · s** durante 2 minutos (algo más si sus peticiones tienen respuestas
+  cortas).
+- **El ejemplo de la introducción del paper es muy conservador.** Una cuota de 30.000 peticiones
+  cada 30 minutos con un ritmo de 1.400 por minuto implica B ≈ 1,4, frente al ≈ 3,5 medido.
+  Conviene recalcular los ejemplos de las Tablas 1–3 con el valor medido.
+- **Refuerza la RQ1 (portabilidad).** A diferencia de K, que es relativo a cada despliegue, B se
+  puede comparar entre modelos en términos absolutos, y sale igual en los tres. Es un argumento
+  cuantitativo de portabilidad que sustituye a la inspección visual de los mapas de calor.
+- **Propuesta:** incluirlo en el paper como una pregunta de investigación nueva, *"RQ4 (Burst
+  factor)"*. El borrador está en [`latex/section_additivity_burst.tex`](latex/section_additivity_burst.tex),
+  con sus tablas, figuras y macros.
+
+### 9.4. Activos para el artículo
+
+[`latex/`](latex/) contiene todo lo necesario para incorporar estos resultados al paper, en inglés:
+
+- [`macros.tex`](latex/macros.tex): 115 constantes con todos los valores citados (por ejemplo,
+  `\scaleQHatBayes` o `\scaleBurstMedian`), generadas a partir de los resultados. Si se recalcula
+  el análisis, el texto se actualiza solo.
+- [`tables/`](latex/tables/): 6 tablas con booktabs (leyes de combinación, sesgo por modelo, MIT
+  frente a MST, tipo pesado, burst factor resumido y por celda).
+- [`figures/`](latex/figures/): 4 figuras vectoriales en PDF a la medida de LNCS.
+- [`section_additivity_burst.tex`](latex/section_additivity_burst.tex): borrador de las
+  subsecciones RQ3 y RQ4 escrito con las macros.
+- [`preview.pdf`](latex/preview.pdf): todo compilado con la clase LNCS, para revisarlo.
+
+---
+
+## 10. Siguientes pasos
 
 - Revisar en el código de MoST cómo se calcula el veredicto del SLA en MST. Si es agregado,
   evaluarlo también por tipo de petición.
@@ -425,11 +500,13 @@ aclarar qué datos alimentan cada figura y, si hace falta, unificar las fuentes.
 
 ## Reproducir
 
-```
-python analysis/additivity_analysis.py --out <dir>     # análisis frecuentista + bayesiano (PyMC)
-python analysis/build_report.py <dir> report.html      # informe HTML con las figuras
-python analysis/build_animations.py <dir> anim.html    # escenas animadas (solo usa los datos frecuentistas)
+```text
+python -m pip install -r analysis/requirements.txt
+python analysis/run_all.py                # todo: análisis, LaTeX y sitio (15-30 min)
+python analysis/run_all.py --skip-bayes   # solo la parte frecuentista, unos minutos
+python analysis/run_all.py --reuse        # regenera LaTeX y sitio a partir de analysis/output
 ```
 
-Requiere `pandas numpy scipy statsmodels pymc arviz`. En Windows, conviene crear el entorno virtual
-en una ruta corta, porque pip falla con rutas largas si no están habilitadas.
+Las instrucciones completas del artefacto, en inglés, están en [`README.md`](README.md). En
+Windows, conviene crear el entorno virtual en una ruta corta, porque pip falla con rutas largas si
+no están habilitadas.
