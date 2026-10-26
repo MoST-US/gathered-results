@@ -1,0 +1,43 @@
+# Publishes the SCALE analysis artifact (docs/) to GitHub Pages.
+# Only docs/ is downloaded: the checkout is sparse and blob-filtered, so the ~20 GB of measurement
+# data in MIT_MST_results/ is never fetched. docs/ is built locally with `python analysis/run_all.py`
+# and committed; this workflow only publishes it.
+# Requires Settings -> Pages -> Build and deployment -> Source: GitHub Actions.
+name: artifact
+
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**", ".github/workflows/artifact.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout docs/ only
+        uses: actions/checkout@v5
+        with:
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /docs/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4

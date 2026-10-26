@@ -1,0 +1,12 @@
+% Token-bucket parameters derived from the burst factor, per deployment.
+\begin{tabular}{lccccrrc}
+\toprule
+ & \multicolumn{2}{c}{Burst factor} & \multicolumn{2}{c}{Depth $b/s$ (min)} & & & \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+Model & $B$ & $B_{safe}$ & typical & safe & $SK_{max}$ & $\Theta = B \cdot SK_{max}$ & $\varphi_{max}$ ($\rho=1.2$) \\
+\midrule
+DeepSeek-R1-Distill-Qwen-7B & 3.57 & 3.31 & 5.1 & 4.6 & 2{,}307 & 8{,}226 & 77\,\% \\
+Gemma-7B & 3.56 & 3.28 & 5.1 & 4.6 & 2{,}047 & 7{,}297 & 77\,\% \\
+Llama-3.1-8B-Instruct & 3.55 & 3.38 & 5.1 & 4.8 & 2{,}176 & 7{,}717 & 77\,\% \\
+\bottomrule
+\end{tabular}

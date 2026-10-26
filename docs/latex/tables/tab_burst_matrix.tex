@@ -1,0 +1,23 @@
+% Burst factor B = MIT/MST per request class (rows: input tokens, columns: output tokens).
+\begin{tabular}{llrrrrr}
+\toprule
+ & & \multicolumn{5}{c}{Output tokens} \\
+\cmidrule(lr){3-7}
+Model & Input & 1-100 & 100-300 & 300-600 & 600-1000 & 1000-1500 \\
+\midrule
+\multirow{4}{*}{DeepSeek} & 600-1000 & \textbf{4.62} & 3.60 & 3.41 & 3.44 & 3.49 \\
+ & 300-600 & 3.93 & \textbf{4.56} & 3.22 & 3.32 & 3.27 \\
+ & 100-300 & \textbf{4.65} & \textbf{4.11} & \textbf{4.19} & 3.44 & 3.43 \\
+ & 1-100 & \textbf{5.63} & 3.60 & 3.47 & 3.51 & 3.41 \\
+\midrule
+\multirow{4}{*}{Gemma} & 600-1000 & 3.45 & \textbf{4.08} & 3.48 & 3.62 & \textbf{11.64} \\
+ & 300-600 & 3.64 & 3.65 & 3.43 & 3.28 & \textbf{6.02} \\
+ & 100-300 & 3.98 & 3.87 & 3.41 & 3.26 & 3.40 \\
+ & 1-100 & \textbf{4.24} & 3.37 & 3.46 & 3.37 & \textbf{2.99} \\
+\midrule
+\multirow{4}{*}{Llama} & 600-1000 & 3.91 & 3.56 & \textbf{4.13} & 3.52 & 3.29 \\
+ & 300-600 & 3.58 & 3.71 & 3.43 & 3.41 & 3.25 \\
+ & 100-300 & 3.99 & \textbf{5.37} & 3.48 & 3.39 & 3.43 \\
+ & 1-100 & \textbf{4.69} & 3.55 & 3.45 & 3.50 & 3.41 \\
+\bottomrule
+\end{tabular}

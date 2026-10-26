@@ -1,0 +1,13 @@
+{
+  "title": "SCALE replication artifact: MoST measurements, additivity of Capacity Units and burst factor",
+  "upload_type": "dataset",
+  "description": "<p>Raw MoST (Measuring of Sustainable Throughput) results for three 7-8B LLMs served on NVIDIA A40 GPUs, together with the analysis code and outputs used in the evaluation of the SCALE paper: frequentist and Bayesian tests of the additivity of Capacity Units under request mixes, and the burst factor MIT/MST of every request class. Includes LaTeX assets (macros, tables, figures, draft section) and a static site (docs/) with an interactive statistical report and didactic animations that works offline.</p>",
+  "creators": [
+    {"name": "Parejo, José Antonio"}
+  ],
+  "keywords": ["LLMaaS", "capacity planning", "throughput", "MoST", "SCALE", "oversubscription", "burst factor"],
+  "related_identifiers": [
+    {"identifier": "https://github.com/MoST-US/gathered-results", "relation": "isSupplementTo", "scheme": "url"}
+  ],
+  "notes": "Run analysis/run_all.py to reproduce; open docs/index.html to browse the results offline."
+}

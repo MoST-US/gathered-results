@@ -1,5 +1,11 @@
 # gathered-results
 
+> **SCALE paper artifact.** This repository is also the replication package for the evaluation
+> of Capacity Units in the SCALE paper: additivity of Capacity Units under request mixes and the
+> burst factor MIT/MST. Browse the results at <https://most-us.github.io/gathered-results/> (or open
+> `docs/index.html` offline); code, reproduction steps and LaTeX assets are described in
+> [`analysis/README.md`](analysis/README.md).
+
 An archive of MoST experiment results gathered through the dashboard, plus two small Python 3
 helpers that flatten the nested archive into a single analysis-ready CSV.
 

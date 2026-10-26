@@ -197,8 +197,8 @@ ul.tight { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; color: var(-
 <section>
   <div class="sec-head prose">
     <div class="eyebrow">Figure 6</div>
-    <h2>Mix deviations are larger than run-to-run noise</h2>
-    <p>This figure compares the scale of three noise sources: re-running the same pure cell on another day (σ<sub>rep</sub>), how sharply the SLA flips from pass to fail (s), and the non-additive residual of each mix around the harmonic law (σ<sub>mix</sub>). When σ<sub>mix</sub> is larger than σ<sub>rep</sub>, the mixes carry a real interaction effect beyond measurement noise.</p>
+    <h2>Mix deviations are larger than repeat-to-repeat noise</h2>
+    <p>This figure compares four sources of variation: re-running the same pure cell (σ<sub>rep</sub>), how sharply the SLA flips from pass to fail (s), re-running the same mix design (σ<sub>run</sub>), and the departure of each mix design from the harmonic law (σ<sub>mix</sub>). Repeated runs of a design share one design effect, so σ<sub>mix</sub> is the real non-additivity and σ<sub>run</sub> is the instability of the measurement. Both use heavy-tailed (Student-t, ν = 4) distributions.</p>
   </div>
   <div class="two">
     <figure>
@@ -210,11 +210,63 @@ ul.tight { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; color: var(-
       <figcaption id="cap7"></figcaption>
     </figure>
   </div>
+  <h3>Mixes with and without the heaviest cell (600-1000 → 1000-1500)</h3>
+  <div class="tbl"><table id="stable"></table></div>
+</section>
+
+<section id="burst-section">
+  <div class="sec-head prose">
+    <div class="eyebrow">Figure 7</div>
+    <h2>The burst factor is almost the same everywhere</h2>
+    <p>The burst factor of a request class is B = MIT / MST: how many times its sustainable rate (30-minute MST test) a client can reach during a 2-minute burst (MIT test). SCALE prices requests with the sustainable capacity and keeps the instantaneous one as a safety threshold. Both price classes the same way only if B is the same for every class.</p>
+  </div>
+  <figure>
+    <div class="chart" id="figB"></div>
+    <figcaption id="capB"></figcaption>
+  </figure>
+  <div class="two">
+    <figure>
+      <div class="chart" id="figBm"></div>
+      <figcaption id="capBm"></figcaption>
+    </figure>
+    <figure>
+      <div class="tbl"><table id="btable"></table></div>
+      <figcaption id="capBt"></figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="tb-section">
+  <div class="sec-head prose">
+    <div class="eyebrow">Figure 8 · contribution</div>
+    <h2>Sizing SCALE's token bucket from the burst factor</h2>
+    <p>SCALE refills each user's Consumption Units with a token bucket but leaves two things open: how deep the bucket is (how large and long a burst may be) and where the instantaneous safety threshold sits in the user-facing currency. The burst factor fixes both, and adds a burst-aware bound on oversubscription.</p>
+  </div>
+  <div class="formula">Rule 1 · bucket depth          b = (B − 1) · s · W                  (bursts of B·s for W = 2 min)
+Rule 2 · throttling threshold   Θ = B · SK_max per minute, averaged over the last W minutes
+Rule 3 · burst-safe oversubscription   ρ ≤ B / (1 + φ (B − 1))   (φ = share of the allocation bursting at once)</div>
+  <div class="two">
+    <figure>
+      <div class="controls" style="display:flex;flex-wrap:wrap;gap:10px 18px;font-size:.88rem;color:var(--ink-2)">
+        <label for="tb-s">Plan rate s (units/min) <input id="tb-s" type="number" min="1" step="1" value="100" style="width:6em"></label>
+        <label for="tb-rho">ρ <input id="tb-rho" type="number" min="1" max="3" step="0.05" value="1.2" style="width:5em"></label>
+        <label><input id="tb-safe" type="checkbox"> conservative B (10th percentile)</label>
+      </div>
+      <div class="stats" id="tb-out"></div>
+      <figcaption id="capTb"></figcaption>
+    </figure>
+    <figure>
+      <div class="chart" id="figTb"></div>
+      <figcaption id="capTb2"></figcaption>
+    </figure>
+  </div>
+  <h3>The illustrative plans of the paper's Table 3, re-derived</h3>
+  <div class="tbl"><table id="tbplans"></table></div>
 </section>
 
 <section>
   <div class="sec-head prose"><div class="eyebrow">Inference tables</div><h2>Frequentist tests</h2>
-  <p>These tests use the log-ratio r = log(C<sub>mix</sub> / Ĉ<sub>law</sub>) per mix run. TOST tests equivalence to zero within ±10 %, so a small p means the bias is practically negligible. The random-effects estimate (DerSimonian–Laird) weights each run by its measurement precision and reports the heterogeneity τ and I².</p></div>
+  <p>These tests use the log-ratio r = log(C<sub>mix</sub> / Ĉ<sub>law</sub>), averaged over the repeated runs of each mix design, so each design counts once (n = designs). TOST tests equivalence to zero within ±10 %, so a small p means the bias is practically negligible. The random-effects estimate (DerSimonian–Laird) weights each run by its measurement precision and reports the heterogeneity τ and I².</p></div>
   <div class="seg" role="group" aria-label="Law for tests">
     <button id="tlaw-H" aria-pressed="true">Harmonic</button>
     <button id="tlaw-G" aria-pressed="false">Geometric</button>
@@ -232,13 +284,15 @@ ul.tight { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; color: var(-
   <div class="sec-head prose"><div class="eyebrow">Method</div><h2>How capacity and additivity were estimated</h2></div>
   <div class="prose" style="display:grid;gap:14px;color:var(--ink-2)">
     <p><b style="color:var(--ink)">Data.</b> <span id="m-data"></span></p>
-    <p><b style="color:var(--ink)">Capacity is latent.</b> A run never observes its capacity C directly. It observes pass/fail verdicts of the SLA at the request rates (req/min) chosen by the doubling-then-bisection search, and the verdicts are noisy near the threshold: <span id="m-nonmono"></span> of the pure-cell runs end with a "largest pass" above the "smallest fail". The Bayesian model therefore uses every verdict through a logistic threshold likelihood:</p>
+    <p><b style="color:var(--ink)">Capacity is latent.</b> A run never observes its capacity C directly. It observes pass/fail verdicts of the SLA at the request rates (req/min) chosen by the doubling-then-bisection search, and the verdicts are noisy near the threshold: <span id="m-nonmono"></span> of the pure-cell runs end with a "largest pass" above the "smallest fail". The Bayesian model therefore uses every verdict through a logistic threshold likelihood, fitted in two stages ("cut"): stage 1 estimates the pure-cell capacities from pure runs only; stage 2 fits the mixes with those capacities fixed at their posterior means plus each mix's known prediction error. Without the cut, a few extreme mixes pull the shared pure-cell capacities away from their own data and the joint posterior becomes multimodal.</p>
     <div class="formula">P(pass | r) = logistic( (θ_run − log r) / s_kind )
-pure run :  θ = μ_cell + σ_rep,kind · z           (day-to-day replicate noise)
-mix run  :  θ = log M_q(p, e^μ) + δ_model×kind + σ_mix,kind · z
+stage 1, pure run :  θ = μ_cell + σ_rep,kind · z                       (day-to-day replicate noise)
+stage 2, mix run  :  θ = log M_q(p, e^μ̂) + se_pred · e + δ_model×kind
+                         + σ_mix,kind · u_design + σ_run,kind · z
+            u_design, z ~ Student-t(ν = 4)               (design effect shared by its repeats)
             M_q(p, C) = (Σ pᵢ Cᵢ^q)^(1/q)          q = −1 harmonic · 0 geometric · +1 arithmetic
 δ_g = δ₀ + τ_δ · z_g ;  μ ~ N(log 500, 3) ;  σ ~ HalfN(0.3) ;  s ~ LogN(log 0.05, 0.5) ;  q ~ N(0, 2)</div>
-    <p>Pure and mix runs are fitted jointly, so the uncertainty of each component capacity propagates into the prediction it feeds. Proportions pᵢ are the realised request shares of each run, weighted by request counts. We fit four variants with NUTS (4 chains × 1,500 draws after 1,500 tuning steps): harmonic, geometric and arithmetic with q fixed, and a free-q model. <span id="m-diag"></span></p>
+    <p>The uncertainty of each component capacity enters stage 2 through se_pred (delta method on the stage-1 posterior covariance). Proportions pᵢ are the realised request shares of each run, weighted by request counts. We fit four variants with NUTS (4 chains × 600 draws after 600 tuning steps; effective sample size ≥ 350 for every global parameter): harmonic, geometric and arithmetic with q fixed, and a free-q model. Longer runs occasionally let one chain drift into a distant region of the badly specified laws without changing the medians. <span id="m-diag"></span></p>
     <p><b style="color:var(--ink)">Comparing laws.</b> Each law is scored by its posterior predictive log density for the pass/fail verdicts of every mix run. The run's own residual is integrated out, so a law cannot hide its misfit in it. The frequentist side uses the final search bracket [largest pass, smallest fail] (geometric midpoint) and replicate-averaged pure capacities. It adds a profile-likelihood interval for q with group offsets profiled out, and a calibration regression log C<sub>obs</sub> = a + b·log Ĉ<sub>H</sub>.</p>
     <p><b style="color:var(--ink)">Caveats.</b></p>
     <ul class="tight" id="caveats"></ul>
@@ -263,37 +317,41 @@ const $ = id => document.getElementById(id);
 /* ---------- text ---------- */
 function text() {
   const M = R.meta, h = R.tests.H.all, q = R.q.bayes, d0 = R.overall.bayes, sh = R.share;
-  $("lede").textContent = `When an LLM server receives a mix of request shapes (short and long prompts, short and long answers), can its maximum sustainable rate be predicted from the capacity of each shape measured alone? Across ${M.mix_runs} mix runs (${M.designs} distinct mixes) on three 7–8 B models, the answer is yes, to within about 10 %, provided the capacities are combined harmonically. Each request type uses up a fixed fraction of the server, and those fractions add.`;
-  $("meta").innerHTML = [`${M.rows.toLocaleString("en-US")} SLA evaluations`, `${M.units} search runs`, `${M.mix_runs} mix runs · ${M.designs} mix designs`, `3 models · MIT (120 s) and MST (1800 s) tests`].map(s => `<span>${s}</span>`).join("");
+  const S = (k, hv) => R.sens.find(s => s.kind === k && s.heavy === hv);
+  const SM = (m, k, hv) => R.sens_model.find(s => s.model === m && s.kind === k && s.heavy === hv);
+  const band = k => Math.round(100 * (Math.exp(1.645 * Math.hypot(R.sd.harmonic.mix[k].med, R.sd.harmonic.run[k].med, d0.med)) - 1));
+  $("lede").textContent = `When an LLM server receives a mix of request shapes (short and long prompts, short and long answers), can its maximum sustainable rate be predicted from the capacity of each shape measured alone? Across ${M.mix_runs} mix runs (${M.designs} distinct mixes) on three 7–8 B models, the answer is mostly yes, provided the capacities are combined harmonically: each request type uses up a fixed fraction of the server, and those fractions add. The rule breaks down for one cell, long prompts with long answers, in the 30-minute tests.`;
+  $("meta").innerHTML = [`${M.rows.toLocaleString("en-US")} SLA evaluations`, `${M.units} search runs`, `${M.mix_runs} mix runs · ${M.designs} mix designs`, `${M.repeated_runs} repeated runs of ${M.repeated_designs} designs`, `3 models · MIT (120 s) and MST (1800 s) tests`].map(s => `<span>${s}</span>`).join("");
+  const sMIT = S("MIT", false), sMST = S("MST", false);
   const V = [
     ["yes", "Additive in load", "Harmonic law: 1/C_mix = Σ pᵢ / Cᵢ",
-      `Free-exponent fit gives q = ${q.med.toFixed(2)} (90 % CrI ${q.lo90.toFixed(2)} to ${q.hi90.toFixed(2)}); frequentist profile ${R.q.prof.q_hat.toFixed(2)} (95 % CI ${R.q.prof.ci[0].toFixed(2)} to ${R.q.prof.ci[1].toFixed(2)}). The harmonic prediction beats the arithmetic one for ${pctr(M.h_better)} of runs (Wilcoxon p ${fmtP(M.hv_a)}). Calibration slope b = ${R.calib.b.toFixed(3)} (95 % CI ${R.calib.b_ci[0].toFixed(3)} to ${R.calib.b_ci[1].toFixed(3)}), R² = ${R.calib.r2.toFixed(3)}.`],
-    ["part", "Small, real bias", `Mixes run ${pct(d0.med)} versus the harmonic law on average`,
-      `Pooled bias δ₀ = ${pct(d0.med)} (90 % CrI ${pct(d0.lo90)} to ${pct(d0.hi90)}), P(|δ₀| < 10 %) = ${pctr(d0.p_rope)}. Frequentist mean ${pct(h.mean)} (95 % CI ${pct(h.ci95[0])} to ${pct(h.ci95[1])}, t-test p ${fmtP(h.p_t)}; TOST ±10 % p ${fmtP(h.p_tost)}). The bias is statistically detectable but practically small, and its sign depends on the model (Figure 3).`],
+      `Free-exponent fit gives q = ${q.med.toFixed(2)} (90 % CrI ${q.lo90.toFixed(2)} to ${q.hi90.toFixed(2)}); frequentist profile ${R.q.prof.q_hat.toFixed(2)} (95 % CI ${R.q.prof.ci[0].toFixed(2)} to ${R.q.prof.ci[1].toFixed(2)}). The harmonic law (q = −1) is the closest of the classical laws by far: it beats the arithmetic one for ${pctr(M.h_better)} of runs (Wilcoxon p ${fmtP(M.hv_a)}). Calibration slope b = ${R.calib.b.toFixed(3)} (95 % CI ${R.calib.b_ci[0].toFixed(3)} to ${R.calib.b_ci[1].toFixed(3)}), R² = ${R.calib.r2.toFixed(3)}.`],
+    ["part", "Small bias", `Mixes run ${pct(d0.med)} versus the harmonic law on average`,
+      `Pooled bias δ₀ = ${pct(d0.med)} (90 % CrI ${pct(d0.lo90)} to ${pct(d0.hi90)}), P(|δ₀| < 10 %) = ${pctr(d0.p_rope)}. Frequentist mean ${pct(h.mean)} (95 % CI ${pct(h.ci95[0])} to ${pct(h.ci95[1])}); TOST ±10 % p ${fmtP(h.p_tost)}. DeepSeek and Llama mixes run 7–9 % below the prediction; Gemma-7B sits on it in the robust Bayesian estimate, and above it only in the raw mean, which a few heavy-cell mixes pull up (Figure 3).`],
     ["yes", "Bounded", "Mix capacity lies between its slowest and fastest component",
-      `${R.bounds.minmax[0]} of ${R.bounds.minmax[1]} runs fall inside [min Cᵢ, max Cᵢ] (Clopper–Pearson 95 % CI ${pctr(R.bounds.minmax[2][0], 1)} to ${pctr(R.bounds.minmax[2][1], 1)}). The two exceptions (both Llama-3.1-8B MST) fall 12 % and 2 % below their slowest component. No run exceeds the arithmetic mean (${R.bounds.above_A} of ${R.bounds.minmax[1]}), so the arithmetic law is a hard upper bound in practice. Posterior share of runs inside [min, max]: ${pctr(sh.minmax.med)}.`],
-    ["part", "Not exact", "Residual interaction beyond measurement noise",
-      `The non-additive residual per mix (σ_mix ≈ ${pct(R.sd.harmonic.mix.MIT.med, 0).replace("+", "")} MIT, ${pct(R.sd.harmonic.mix.MST.med, 0).replace("+", "")} MST) is much larger than day-to-day replicate noise (σ_rep ≈ ${pct(R.sd.harmonic.rep.MIT.med, 1).replace("+", "")}, ${pct(R.sd.harmonic.rep.MST.med, 1).replace("+", "")}). Random-effects I² = ${pctr(h.I2)}. The interaction is small for the short MIT tests but substantial for the 30-minute MST tests, where every credible departure lies. For planning, a 90 % band around the harmonic prediction is about ±${Math.round(100 * (Math.exp(1.645 * Math.hypot(R.sd.harmonic.mix.MIT.med, R.overall.bayes.med)) - 1))} % for MIT and ±${Math.round(100 * (Math.exp(1.645 * Math.hypot(R.sd.harmonic.mix.MST.med, R.overall.bayes.med)) - 1))} % for MST.`],
+      `${R.bounds.minmax[0]} of ${R.bounds.minmax[1]} runs fall inside [min Cᵢ, max Cᵢ] (Clopper–Pearson 95 % CI ${pctr(R.bounds.minmax[2][0], 1)} to ${pctr(R.bounds.minmax[2][1], 1)}). The exceptions fall ${Math.round(100 * (1 - d3.max(R.bounds_out, b => b.ratio)))}–${Math.round(100 * (1 - d3.min(R.bounds_out, b => b.ratio)))} % below the slowest component, and all but one are Llama-3.1-8B MST runs. No run exceeds the arithmetic mean (${R.bounds.above_A} of ${R.bounds.minmax[1]}).`],
+    ["part", "Breaks for heavy mixes", "Long-prompt, long-answer requests break the rule, mostly in MST",
+      `Without the 600-1000 → 1000-1500 cell, ${pctr(sMIT.within10)} of MIT runs are within ±10 % (mean ${pct(sMIT.mean)}), and ${pctr(sMST.within10)} of MST runs (mean ${pct(sMST.mean)}). With it, MST deviations become large and model-specific: Gemma-7B ${pct(SM("Gemma-7B", "MST", true).mean)}, Llama-3.1-8B ${pct(SM("Llama-3.1-8B", "MST", true).mean)}, and 50/50 mixes give different results on repeated runs (Figure 6). A 90 % planning band around the harmonic prediction is about ±${band("MIT")} % for MIT and ±${band("MST")} % for MST.`],
   ];
   $("verdicts").innerHTML = V.map(([c, tag, h3, p]) => `<div class="verdict"><div class="tag ${c}">${tag}</div><div><h3>${h3}</h3><p>${p}</p></div></div>`).join("");
   const st = [
     [`q = ${q.med.toFixed(2)}`, "estimated power-mean exponent (harmonic = −1)"],
     [pct(d0.med), "average mix bias vs harmonic law"],
     [`${R.bounds.minmax[0]}/${R.bounds.minmax[1]}`, "runs within the component capacity range"],
-    [pctr(sh.rope.med), "of runs within ±10 % of the harmonic law (posterior)"],
+    [pctr(sMIT.within10), "of MIT runs without the heavy cell within ±10 %"],
   ];
   $("stats").innerHTML = st.map(([b, s]) => `<div class="stat"><b class="num">${b}</b><span>${s}</span></div>`).join("");
 
-  $("m-data").textContent = `${M.rows.toLocaleString("en-US")} SLA evaluations from the archive (3 models on one A40 each; MIT = 120 s maximum-inference-throughput runs; MST = 1800 s maximum-sustainable-throughput runs). Pure cells: 20 input×output token-range cells, with 4 replicate searches per cell for MIT and 1–2 for MST. Mixes: ${M.mix_runs} runs of ${M.designs} designs with 2–5 components drawn from 5 cells (1-100_1-100, 1-100_1000-1500, 100-300_300-600, 600-1000_1-100, 600-1000_1000-1500). Two design families appear: equal-count (50/50) mixes and load-balanced mixes, where pᵢ ∝ Cᵢ so every type takes the same share of the server.`;
+  $("m-data").textContent = `${M.rows.toLocaleString("en-US")} SLA evaluations from the archive. Repeated runs of the same mix design (${M.repeated_runs} runs of ${M.repeated_designs} designs, 2–6 runs each) are kept and modelled as runs nested in designs. ${M.dups} folders were byte-identical copies of another run (same iteration timestamps and the same results.csv content, stored under a second folder name or copied into a later experiment); they are counted once, because they are one execution, not a repeat. Three models on one A40 each; MIT = 120 s maximum-inference-throughput runs; MST = 1800 s maximum-sustainable-throughput runs. Pure cells: 20 input×output token-range cells, 4 replicate searches per cell for MIT and 2 for MST. Mixes: ${M.mix_runs} runs of ${M.designs} designs with 1–5 components drawn from 5 cells (1-100_1-100, 1-100_1000-1500, 100-300_300-600, 600-1000_1-100, 600-1000_1000-1500). Two design families: equal-count (50/50) and load-balanced, where pᵢ ∝ Cᵢ so every type takes the same share of the server. One run with a single component serves as a sanity check: it lands within 1 % of its pure-cell capacity.`;
   $("m-nonmono").textContent = `${M.non_monotone}`;
   const dg = R.diag;
   $("m-diag").textContent = `Convergence: ${Object.entries(dg).map(([k, v]) => `${k} ${v.divergences} divergences, max split-R̂ ${v.max_rhat.toFixed(3)}`).join("; ")}.`;
+  const unstable = [...((R.mix_rep.MIT && R.mix_rep.MIT.unstable) || []), ...((R.mix_rep.MST && R.mix_rep.MST.unstable) || [])];
   const cav = [
-    `Gemma-7B MST has a single pure-cell search per cell. Its 600-1000_1000-1500 cell measured only ≈ 6.5 req/min, about 12× below its MIT value, where the other models show ≈ 3.5×. The two largest positive deviations (≈ +44 % and +86 %) both involve shares of under 3 % of that cell, so a low pure measurement is the likely cause, not super-additivity. Re-measuring that cell is the most valuable next experiment.`,
-    `Mix designs were derived from earlier capacity estimates (load-balanced pᵢ ∝ Cᵢ), and the same pure-cell data are used for the prediction. This is fine for testing a law, but the mixes are not a random sample of workloads: they cover 2–5 components from 5 of the 20 cells.`,
-    `MST pure cells have only 1–2 searches each, so σ_rep for MST is weakly identified. MST mix residuals (σ_mix ≈ 20 %) may partly reflect slow drift over the 30-minute runs, not only true interference between request types.`,
-    `The binary search stops at a bracket 3–6 % wide, which sets a floor on per-run precision. The Bayesian model accounts for this through the logistic transition width s; the frequentist analysis uses the bracket midpoint.`,
-    `Runs of the same design in two experiments are treated as independent replicates. They are close in time, so the frequentist p-values may be slightly optimistic. The random-effects and Bayesian estimates, which model heterogeneity explicitly, are the ones to cite.`,
+    `Gemma-7B's MST capacity for 600-1000_1000-1500 was re-measured and is reproducible (≈ 6.5 and 6.9 req/min), yet 50/50 mixes containing that cell pass the SLA at ≈ 40 req/min, i.e. ≈ 20 heavy requests per minute. The pure cell fails the SLA at 8 and 16 req/min while completing 100 % of requests. The most likely explanation is that the MST pass/fail criterion is computed over all requests of the run (for example a latency percentile), so short requests in a mix can mask the slow ones. If so, capacity is additive in resources but the SLA verdict is not, and the SLA should be evaluated per request type for mixed workloads. This needs checking against the MoST evaluation code.`,
+    `Repeated runs of the same mix design usually land in the same search bracket (median spread 0). The exceptions are ${unstable.map(u => `${u.model} ${u.label} (×${Math.exp(u.spread).toFixed(1)} between runs)`).join("; ")}. Equal shares sit exactly at the median of the request population, which is consistent with a percentile-based SLA flipping between the two request types.`,
+    `Mix designs were derived from earlier capacity estimates (load-balanced pᵢ ∝ Cᵢ), and the same pure-cell data are used for the prediction. This is fine for testing a law, but the mixes are not a random sample of workloads: they cover 1–5 components from 5 of the 20 cells.`,
+    `The binary search stops at a bracket 3–6 % wide, which sets a floor on per-run precision. The Bayesian model accounts for this through the logistic transition width s; the frequentist analysis uses the bracket midpoint. Runs close in time are treated as independent, so the random-effects and Bayesian estimates, which model heterogeneity explicitly, are the ones to cite.`,
   ];
   $("caveats").innerHTML = cav.map(c => `<li>${c}</li>`).join("");
 }
@@ -357,7 +415,7 @@ function fig1() {
     .on("mouseenter", (ev, d) => showTip(ev, mixTip(d, `<div><span class="k">measured / ${nm}</span> <b>${pct(Math.log(d.obs / d[key]))}</b></div>`))).on("mousemove", moveTip).on("mouseleave", hideTip);
   const t = R.tests[key].all;
   $("cap1").innerHTML = `<b>${nm[0].toUpperCase() + nm.slice(1)} law:</b> mean log-error ${pct(t.mean)}, RMSE ${(100 * t.rmse).toFixed(1)} % (log scale), ${R.mixes.filter(d => Math.abs(d["f" + key]) < Math.log(1.1)).length} of ${R.mixes.length} runs within ±10 %. ` +
-    {H: "Points hug the diagonal over two orders of magnitude, from about 70 to 5,500 req/min.", G: "The geometric law overpredicts almost every mix.", A: "The arithmetic law overpredicts badly, often by 2–5×, because one slow request type drags down the whole server."}[key];
+    {H: `Most points hug the diagonal over two orders of magnitude, from about ${fmtN(d3.min(R.mixes, d => d.obs))} to ${fmtN(d3.max(R.mixes, d => d.obs))} req/min; the clear outliers above it are Gemma-7B MST mixes containing the heavy 600-1000_1000-1500 cell.`, G: "The geometric law overpredicts almost every mix.", A: "The arithmetic law overpredicts badly, often by 2–5×, because one slow request type drags down the whole server."}[key];
 }
 
 /* ---------- Fig 2a: profile likelihood for q ---------- */
@@ -383,7 +441,7 @@ function fig2a() {
   const ay = svg.append("g").attr("transform", `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickSizeOuter(0)); axisStyle(ay);
   label(svg, (m.l + W - m.r) / 2, H - 8, "power-mean exponent q", {a: "middle", c: "--muted"});
   svg.append("text").attr("transform", `translate(12,${(m.t + H - m.b) / 2}) rotate(-90)`).attr("text-anchor", "middle").attr("fill", css("--muted")).style("font", "11px " + css("--f-body")).text("likelihood-ratio statistic");
-  $("cap2a").innerHTML = `<b>Profile likelihood of q</b> (line) with the Bayesian 95 % credible interval (band, ${qb.lo95.toFixed(2)} to ${qb.hi95.toFixed(2)}). Geometric and arithmetic laws are rejected (LR > 60). The harmonic value q = −1 sits just outside the Bayesian 95 % interval and is not rejected by the profile test (p = ${R.q.prof.p_h.toFixed(3)}). The fitted exponent is a hair above −1, a difference of no practical size (Figure 2b).`;
+  $("cap2a").innerHTML = `<b>Profile likelihood of q</b> (line) with the Bayesian 95 % credible interval (band, ${qb.lo95.toFixed(2)} to ${qb.hi95.toFixed(2)}). Geometric and arithmetic laws are rejected (LR > 60). The harmonic value q = −1 ${(-1 < qb.lo95 || -1 > qb.hi95) ? "sits just outside the Bayesian 95 % interval" : "lies inside the Bayesian 95 % interval"} and the profile test gives p = ${R.q.prof.p_h.toFixed(3)} for it. The fitted exponent is slightly above −1; Figure 2b shows how much predictive accuracy that buys.`;
 }
 
 /* ---------- Fig 2b: predictive score per law ---------- */
@@ -413,10 +471,12 @@ function fig3() {
   const rows = [...R.groups.map(g => ({...g, name: gname(g.key)})), {key: "all", name: "Pooled (δ₀)", bayes: R.overall.bayes, freq: R.overall.freq}];
   const {svg, W, H} = svgIn("fig3", 46 + rows.length * 44);
   const m = {l: Math.min(190, W * .36), r: 92, t: 10, b: 36};
-  const x = d3.scaleLinear().domain([Math.log(0.72), Math.log(1.32)]).range([m.l, W - m.r]);
+  const lo3 = Math.min(Math.log(0.8), d3.min(rows, r => Math.min(r.bayes.lo95, r.freq.lo)) - 0.03);
+  const hi3 = Math.max(Math.log(1.2), d3.max(rows, r => Math.max(r.bayes.hi95, r.freq.hi)) + 0.03);
+  const x = d3.scaleLinear().domain([lo3, hi3]).range([m.l, W - m.r]);
   const y = d3.scaleBand().domain(rows.map(r => r.key)).range([m.t, H - m.b]).padding(.2);
   svg.append("rect").attr("x", x(-Math.log(1.1))).attr("width", x(Math.log(1.1)) - x(-Math.log(1.1))).attr("y", m.t).attr("height", H - m.b - m.t).attr("fill", css("--band"));
-  const tv = [0.8, 0.9, 1, 1.1, 1.2, 1.3].map(Math.log);
+  const tv = [0.7, 0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.5].map(Math.log).filter(v => v >= lo3 && v <= hi3);
   gridX(svg, x, m.t, H - m.b, tv);
   svg.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", m.t).attr("y2", H - m.b).attr("stroke", css("--axis")).attr("stroke-width", 1.5);
   const c = v => x(Math.max(x.domain()[0], Math.min(x.domain()[1], v)));
@@ -439,7 +499,7 @@ function fig3() {
   const gs = R.groups.map(g => [gname(g.key), g.bayes]);
   const inR = gs.filter(([, b]) => b.hi90 < Math.log(1.1) && b.lo90 > -Math.log(1.1)).map(([n]) => n);
   const nIn = gs.filter(([, b]) => b.med > -Math.log(1.1) && b.med < Math.log(1.1)).length;
-  $("cap3").innerHTML = `${nIn} of the 6 model × test groups have a posterior median within ±10 %, but only ${inR.length ? inR.join(", ") : "none"} has its whole 90 % interval inside the band. Gemma-7B mixes run a little <i>above</i> the harmonic law (${pct(R.groups.find(g => g.key === "Gemma-7B|MIT").bayes.med)} for MIT), while DeepSeek and Llama mixes run below it (DeepSeek MIT ${pct(R.groups.find(g => g.key === "DeepSeek-R1-Qwen-7B|MIT").bayes.med)}, Llama MIT ${pct(R.groups.find(g => g.key === "Llama-3.1-8B|MIT").bayes.med)}). Llama-3.1-8B MST has the largest shortfall, ${pct(R.groups.find(g => g.key === "Llama-3.1-8B|MST").bayes.med)}. Bayesian estimates are partially pooled toward δ₀, which is why Gemma MST (n = 6) is pulled in from its raw mean.`;
+  $("cap3").innerHTML = `${nIn} of the 6 model × test groups have a posterior median within ±10 %, but only ${inR.length ? inR.join(", ") : "none"} has its whole 90 % interval inside the band. Gemma-7B is at ${pct(R.groups.find(g => g.key === "Gemma-7B|MIT").bayes.med)} (MIT) and ${pct(R.groups.find(g => g.key === "Gemma-7B|MST").bayes.med)} (MST) in the Bayesian estimate, while its frequentist mean is positive: the Student-t design effects treat its few heavy-cell mixes (up to +200 %) as outliers instead of shifting the whole group. DeepSeek and Llama run below the law (DeepSeek MIT ${pct(R.groups.find(g => g.key === "DeepSeek-R1-Qwen-7B|MIT").bayes.med)}, Llama MIT ${pct(R.groups.find(g => g.key === "Llama-3.1-8B|MIT").bayes.med)}, Llama MST ${pct(R.groups.find(g => g.key === "Llama-3.1-8B|MST").bayes.med)}). MST intervals are about twice as wide as MIT intervals. Bayesian estimates are partially pooled toward δ₀.`;
 }
 
 /* ---------- Fig 4: caterpillar ---------- */
@@ -448,11 +508,11 @@ function fig4() {
   const m = {l: 56, r: 12, t: 12, b: 34};
   const d = [...R.mixes].sort((a, b) => a.rH - b.rH);
   const x = d3.scaleBand().domain(d.map((_, i) => i)).range([m.l, W - m.r]).padding(.15);
-  const lim = [Math.log(0.45), Math.log(2.1)];
+  const lim = [Math.log(0.4), Math.log(3.6)];
   const y = d3.scaleLinear().domain(lim).range([H - m.b, m.t]);
   const cy = v => y(Math.max(lim[0], Math.min(lim[1], v)));
   svg.append("rect").attr("x", m.l).attr("width", W - m.r - m.l).attr("y", y(Math.log(1.1))).attr("height", y(-Math.log(1.1)) - y(Math.log(1.1))).attr("fill", css("--band"));
-  const tv = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 2].map(Math.log);
+  const tv = [0.5, 0.67, 1, 1.5, 2, 3].map(Math.log);
   gridY(svg, y, m.l, W - m.r, tv);
   svg.append("line").attr("x1", m.l).attr("x2", W - m.r).attr("y1", y(0)).attr("y2", y(0)).attr("stroke", css("--axis")).attr("stroke-width", 1.5);
   const g = svg.append("g").selectAll("g").data(d).join("g").attr("transform", (_, i) => `translate(${x(i) + x.bandwidth() / 2},0)`);
@@ -463,7 +523,7 @@ function fig4() {
   const ay = svg.append("g").attr("transform", `translate(${m.l},0)`).call(d3.axisLeft(y).tickValues(tv).tickFormat(v => pct(v, 0)).tickSizeOuter(0)); axisStyle(ay);
   label(svg, (m.l + W - m.r) / 2, H - 10, `${d.length} mix runs, sorted by posterior deviation from the harmonic law`, {a: "middle", c: "--muted"});
   const nb = d.filter(r => r.rH_hi < -Math.log(1.1)).length, na = d.filter(r => r.rH_lo > Math.log(1.1)).length;
-  $("cap4").innerHTML = `<b>${pctr(R.share.rope.med)}</b> of runs are most probably within ±10 % (posterior). ${nb} runs are credibly more than 10 % <i>below</i> the prediction and ${na} credibly above it. <b>All ${nb + na} are MST (1800 s) runs</b>; no MIT run departs credibly from ±10 %. The shortfalls are mostly Llama-3.1-8B and DeepSeek MST mixes, many containing the long-prompt 600-1000_1-100 cell. The two largest excesses are Gemma-7B mixes holding a tiny share (≤ 3 %) of the 600-1000_1000-1500 cell, whose pure MST capacity is probably under-measured (see caveats).`;
+  $("cap4").innerHTML = `<b>${pctr(R.share.rope.med)}</b> of runs are most probably within ±10 % (posterior). ${nb} runs are credibly more than 10 % <i>below</i> the prediction and ${na} credibly above it; ${d.filter(r => (r.rH_hi < -Math.log(1.1) || r.rH_lo > Math.log(1.1)) && r.kind === "MST").length} of these ${nb + na} are MST (1800 s) runs. ${d.filter(r => r.rH_lo > Math.log(1.1) && r.model === "Gemma-7B" && r.label.includes("600-1000_1000-1500")).length} of the ${na} credible excesses are Gemma-7B mixes that contain the 600-1000_1000-1500 cell (see caveats on how the SLA is evaluated). The shortfalls are spread over all three models, most often Llama-3.1-8B and DeepSeek mixes with that same cell.`;
 }
 
 /* ---------- Fig 5: Jensen envelope ---------- */
@@ -494,6 +554,7 @@ function fig6() {
   ["MIT", "MST"].forEach(k => {
     rows.push({k, n: `σ_rep · ${k}`, v: R.sd.harmonic.rep[k], c: "--muted"});
     rows.push({k, n: `s · ${k}`, v: R.sd.harmonic.s[k], c: "--muted"});
+    rows.push({k, n: `σ_run · ${k}`, v: R.sd.harmonic.run[k], c: "--ink-2"});
     rows.push({k, n: `σ_mix harmonic · ${k}`, v: R.sd.harmonic.mix[k], c: "--accent"});
     rows.push({k, n: `σ_mix arithmetic · ${k}`, v: R.sd.arithmetic.mix[k], c: "--ink-2"});
   });
@@ -510,7 +571,7 @@ function fig6() {
   const ax = svg.append("g").attr("transform", `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(5).tickSizeOuter(0)); axisStyle(ax);
   label(svg, (m.l + W - m.r) / 2, H - 4, "posterior SD on log-capacity scale (90 % CrI)", {a: "middle", c: "--muted", s: 11});
   const S = R.sd.harmonic;
-  $("cap6").innerHTML = `<b>Noise budget.</b> Replicating a pure cell moves its capacity by only ≈ ${(100 * S.rep.MIT.med).toFixed(1)} % (MIT) and ${(100 * S.rep.MST.med).toFixed(1)} % (MST). Mix residuals around the harmonic law are ≈ ${(100 * S.mix.MIT.med).toFixed(0)} % and ${(100 * S.mix.MST.med).toFixed(0)} %, against ${(100 * R.sd.arithmetic.mix.MIT.med).toFixed(0)} % and ${(100 * R.sd.arithmetic.mix.MST.med).toFixed(0)} % for the arithmetic law. MST (1800 s) mixes are noisier than MIT (120 s) mixes.`;
+  $("cap6").innerHTML = `<b>Noise budget.</b> Re-running a pure cell moves its capacity by ≈ ${(100 * S.rep.MIT.med).toFixed(1)} % (MIT) and ${(100 * S.rep.MST.med).toFixed(1)} % (MST); re-running a mix design by ≈ ${(100 * S.run.MIT.med).toFixed(1)} % and ${(100 * S.run.MST.med).toFixed(1)} % (typical scale; the t tails allow occasional large flips). Mix designs depart from the harmonic law by ≈ ${(100 * S.mix.MIT.med).toFixed(0)} % (MIT) and ${(100 * S.mix.MST.med).toFixed(0)} % (MST), against ${(100 * R.sd.arithmetic.mix.MIT.med).toFixed(0)} % and ${(100 * R.sd.arithmetic.mix.MST.med).toFixed(0)} % for the arithmetic law.`;
 }
 
 /* ---------- Fig 7: design family ---------- */
@@ -519,10 +580,10 @@ function fig7() {
   const {svg, W, H} = svgIn("fig7", 40 + fams.length * 2 * 34);
   const m = {l: 150, r: 18, t: 8, b: 36};
   const keys = fams.flatMap(f => ["MIT", "MST"].map(k => f + "|" + k)).filter(k => R.mixes.some(d => d.family + "|" + d.kind === k));
-  const x = d3.scaleLinear().domain([Math.log(0.5), Math.log(1.9)]).range([m.l, W - m.r]);
+  const x = d3.scaleLinear().domain([Math.log(0.4), Math.log(3.6)]).range([m.l, W - m.r]);
   const y = d3.scaleBand().domain(keys).range([m.t, H - m.b]).padding(.2);
   svg.append("rect").attr("x", x(-Math.log(1.1))).attr("width", x(Math.log(1.1)) - x(-Math.log(1.1))).attr("y", m.t).attr("height", H - m.b - m.t).attr("fill", css("--band"));
-  const tv = [0.5, 0.67, 0.8, 1, 1.25, 1.5].map(Math.log);
+  const tv = [0.5, 1, 2, 3].map(Math.log);
   gridX(svg, x, m.t, H - m.b, tv);
   svg.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", m.t).attr("y2", H - m.b).attr("stroke", css("--axis")).attr("stroke-width", 1.5);
   const rnd = d3.randomLcg(7);
@@ -539,7 +600,7 @@ function fig7() {
   const ax = svg.append("g").attr("transform", `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickValues(tv).tickFormat(v => pct(v, 0)).tickSizeOuter(0)); axisStyle(ax);
   label(svg, (m.l + W - m.r) / 2, H - 4, "deviation from harmonic law (black tick = mean)", {a: "middle", c: "--muted", s: 11});
   const F = R.family;
-  $("cap7").innerHTML = `<b>Mix design does not matter.</b> The mean deviation is ${pct(F["equal-count"].mean)} for equal-count (50/50) mixes, ${pct(F["load-balanced"].mean)} for load-balanced and ${pct(F["multi-type"].mean)} for 4–5-type mixes (Kruskal–Wallis p = ${R.drivers.family_kw_p.toFixed(2)}). The spread of component capacities does not predict the deviation either (Spearman ρ = ${R.drivers.spearman_hetero[0].toFixed(2)}, p = ${R.drivers.spearman_hetero[1].toFixed(2)}). What does matter is the test type: MST spreads far wider than MIT.`;
+  $("cap7").innerHTML = `<b>Mix design does not matter.</b> The mean deviation is ${pct(F["equal-count"].mean)} for equal-count (50/50) mixes, ${pct(F["load-balanced"].mean)} for load-balanced and ${pct(F["multi-type"].mean)} for 4–5-type mixes (Kruskal–Wallis p = ${R.drivers.family_kw_p.toFixed(2)}). The spread of component capacities does not predict the deviation either (Spearman ρ = ${R.drivers.spearman_hetero[0].toFixed(2)}, p = ${R.drivers.spearman_hetero[1].toFixed(2)}). What matters is the test type and whether the mix contains the 600-1000_1000-1500 cell (table below).`;
 }
 
 /* ---------- tables ---------- */
@@ -560,13 +621,129 @@ function mtable() {
   $("mtable").innerHTML = `<thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>` + d.map(r => `<tr><td class="lbl">${r.label}</td><td>${r.model}</td><td>${r.kind}</td><td>${r.family}</td><td>${fmtN(r.obs)}</td><td>${fmtN(r.H)}</td><td>${fmtN(r.A)}</td><td>${fmtN(r.cmin)}</td><td>${fmtN(r.cmax)}</td><td>${pct(r.rH)}</td><td>${pct(r.rH_lo)} … ${pct(r.rH_hi)}</td><td>${pctr(r.p_rope)}</td></tr>`).join("") + "</tbody>";
 }
 
+function stable() {
+  const head = ["Model", "Test", "Heavy cell", "Runs", "Mean deviation", "Within ±10 %"];
+  const rows = [];
+  ["MIT", "MST"].forEach(k => [false, true].forEach(hv => {
+    const a = R.sens.find(x => x.kind === k && x.heavy === hv);
+    if (a) rows.push(["All models", k, hv ? "included" : "absent", a.n, pct(a.mean), pctr(a.within10)]);
+  }));
+  MODELS.forEach(m => ["MIT", "MST"].forEach(k => [false, true].forEach(hv => {
+    const a = R.sens_model.find(x => x.model === m && x.kind === k && x.heavy === hv);
+    if (a) rows.push([m, k, hv ? "included" : "absent", a.n, pct(a.mean), "–"]);
+  })));
+  $("stable").innerHTML = `<thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>` + rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("") + "</tbody>";
+}
 function seg(prefix, keys, onSel) {
   keys.forEach(k => $(prefix + k).addEventListener("click", () => { keys.forEach(j => $(prefix + j).setAttribute("aria-pressed", j === k)); onSel(k); }));
 }
-function drawAll() { fig1(); fig2a(); fig2b(); fig3(); fig4(); fig5(); fig6(); fig7(); }
+/* ---------- Fig 7: burst factor ---------- */
+const IN_R = ["1-100", "100-300", "300-600", "600-1000"], OUT_R = ["1-100", "100-300", "300-600", "600-1000", "1000-1500"];
+function figBurst() {
+  if (!R.burst) { $("burst-section").hidden = true; return; }
+  const Bu = R.burst;
+  const wrap = $("figB"); wrap.innerHTML = "";
+  const W = Math.max(300, wrap.clientWidth), per = W >= 720 ? 3 : 1;
+  const pw = per === 3 ? (W - 40) / 3 : W, cw = (pw - 64) / OUT_R.length, ch = 26;
+  const H = per === 3 ? IN_R.length * ch + 70 : 3 * (IN_R.length * ch + 70);
+  const svg = d3.select(wrap).append("svg").attr("viewBox", `0 0 ${W} ${H}`).attr("role", "img");
+  const col = d3.scaleSequential(d3.interpolateBlues).domain([2.6, 6.2]);
+  MODELS.forEach((m, j) => {
+    const ox = per === 3 ? j * (pw + 20) : 0, oy = per === 3 ? 0 : j * (IN_R.length * ch + 70);
+    const g = svg.append("g").attr("transform", `translate(${ox + 56},${oy + 22})`);
+    label(svg, ox + 56, oy + 14, m, {w: 600, c: "--ink", s: 12});
+    const cells = Bu.cells.filter(c => c.model === m);
+    IN_R.forEach((inp, r) => OUT_R.forEach((o, c) => {
+      const d = cells.find(x => x.inp === inp && x.out === o); if (!d) return;
+      const y = (IN_R.length - 1 - r) * ch;
+      g.append("rect").attr("x", c * cw + 1).attr("y", y + 1).attr("width", cw - 2).attr("height", ch - 2).attr("rx", 2)
+        .attr("fill", col(Math.min(6.2, d.B)))
+        .on("mouseenter", ev => showTip(ev, `<div class="t">${m}</div><div class="mono">${inp} in → ${o} out</div><div><span class="k">B</span> <b>${d.B.toFixed(2)}</b>${d.lo ? ` [${d.lo.toFixed(2)}, ${d.hi.toFixed(2)}] 95 %` : ""}</div><div><span class="k">MIT</span> ${fmtN(d.mit)} · <span class="k">MST</span> ${fmtN(d.mst)} req/min</div><div><span class="k">vs model median</span> ${pct(d.dev)}</div>`)).on("mousemove", moveTip).on("mouseleave", hideTip);
+      g.append("text").attr("x", c * cw + cw / 2).attr("y", y + ch / 2 + 4).attr("text-anchor", "middle").attr("pointer-events", "none")
+        .attr("fill", d.B > 4.6 ? "#fff" : "#111").style("font", `${Math.abs(d.dev) > Math.log(1.15) ? 700 : 400} 10.5px ${css("--f-mono")}`).text(d.B.toFixed(1));
+    }));
+    IN_R.forEach((inp, r) => label(svg, ox + 52, oy + 22 + (IN_R.length - 1 - r) * ch + ch / 2 + 4, inp, {a: "end", c: "--muted", s: 10, f: "--f-mono"}));
+    OUT_R.forEach((o, c) => label(svg, ox + 56 + c * cw + cw / 2, oy + 22 + IN_R.length * ch + 14, o, {a: "middle", c: "--muted", s: 9.5, f: "--f-mono"}));
+    label(svg, ox + 56 + OUT_R.length * cw / 2, oy + 22 + IN_R.length * ch + 30, "output tokens  (rows: input tokens)", {a: "middle", c: "--muted", s: 10.5});
+  });
+  const o = Bu.overall, pm = Bu.per_model;
+  const bayesTxt = MODELS.map(m => pm[m].bayes ? `${m} ${pm[m].bayes.median.toFixed(2)} [${pm[m].bayes.ci95[0].toFixed(2)}, ${pm[m].bayes.ci95[1].toFixed(2)}]` : `${m} ${pm[m].freq.median.toFixed(2)}`).join("; ");
+  $("capB").innerHTML = `<b>Burst factor per request class.</b> Median ${o.median.toFixed(2)} over the ${o.n} classes (IQR ${o.q1.toFixed(2)}–${o.q3.toFixed(2)}); ${pctr(o.on_band)} of the classes are within ±15 % of their model's median (bold labels are outside). Per-model medians (Bayesian 95 % CrI): ${bayesTxt}. The model has no detectable effect (ANOVA p = ${Bu.anova["C(model)"].p.toFixed(2)}). Short answers (1–100 output tokens) tolerate larger bursts: B = ${Bu.short.B_short.toFixed(2)} versus ${Bu.short.B_rest.toFixed(2)} (p = ${fmtP(Bu.short.p_mw)}). Gemma's two long-input, long-output cells (up to ${pm["Gemma-7B"].freq.max.toFixed(1)}) coincide with the MST anomaly discussed in the caveats.`;
+
+  // mixes
+  const rows = Bu.mixes.rows;
+  const {svg: s2, W: W2, H: H2} = svgIn("figBm", 300);
+  const m2 = {l: 50, r: 14, t: 12, b: 42};
+  const x = d3.scaleLinear().domain([2.8, 7]).range([m2.l, W2 - m2.r]), y = d3.scaleLinear().domain([2.8, 7]).range([H2 - m2.b, m2.t]);
+  gridY(s2, y, m2.l, W2 - m2.r, [3, 4, 5, 6, 7]); gridX(s2, x, m2.t, H2 - m2.b, [3, 4, 5, 6, 7]);
+  s2.append("path").attr("d", d3.area().x(v => x(v)).y0(v => y(Math.max(2.8, v / 1.15))).y1(v => y(Math.min(7, v * 1.15)))(d3.range(2.8, 7.01, 0.1))).attr("fill", css("--band-2"));
+  s2.append("line").attr("x1", x(2.8)).attr("y1", y(2.8)).attr("x2", x(7)).attr("y2", y(7)).attr("stroke", css("--accent")).attr("stroke-dasharray", "4 3");
+  s2.append("g").selectAll("circle").data(rows).join("circle").attr("cx", d => x(d.pred)).attr("cy", d => y(Math.min(7, d.obs))).attr("r", 5.5)
+    .attr("fill", d => col_(d.model)).attr("stroke", css("--surface")).attr("stroke-width", 1.5)
+    .on("mouseenter", (ev, d) => showTip(ev, `<div class="t">${d.model}</div><div class="mono" style="font-size:.74rem">${d.label}</div><div><span class="k">B measured</span> ${d.obs.toFixed(2)} · <span class="k">predicted</span> ${d.pred.toFixed(2)}</div>`)).on("mousemove", moveTip).on("mouseleave", hideTip);
+  const ax = s2.append("g").attr("transform", `translate(0,${H2 - m2.b})`).call(d3.axisBottom(x).ticks(5).tickSizeOuter(0)); axisStyle(ax);
+  const ay = s2.append("g").attr("transform", `translate(${m2.l},0)`).call(d3.axisLeft(y).ticks(5).tickSizeOuter(0)); axisStyle(ay);
+  label(s2, (m2.l + W2 - m2.r) / 2, H2 - 8, "B predicted from the classes (harmonic MIT / harmonic MST)", {a: "middle", c: "--muted", s: 10.5});
+  s2.append("text").attr("transform", `translate(13,${(m2.t + H2 - m2.b) / 2}) rotate(-90)`).attr("text-anchor", "middle").attr("fill", css("--muted")).style("font", "11px " + css("--f-body")).text("B measured");
+  $("capBm").innerHTML = `<b>Burst factor of mixes</b> measured with the same composition in both tests (${Bu.mixes.n} designs; colours: models as in Figure 1; band: ±15 %). Measured B exceeds the prediction by ${pct(Bu.mixes.mean_err, 0)} on average, because mixes fall further below the additive law in MST than in MIT.`;
+
+  // table
+  const head = ["Model", "Median B", "IQR", "Within ±15 %"];
+  $("btable").innerHTML = `<thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>` + MODELS.map(m => {
+    const f = pm[m].freq, b = pm[m].bayes;
+    return `<tr><td>${m}</td><td>${b ? `${b.median.toFixed(2)} [${b.ci95[0].toFixed(2)}, ${b.ci95[1].toFixed(2)}]` : f.median.toFixed(2)}</td><td>${f.q1.toFixed(2)}–${f.q3.toFixed(2)}</td><td>${pctr(f.on_band)}</td></tr>`;
+  }).join("") + `<tr><td>All classes</td><td>${o.median.toFixed(2)}</td><td>${o.q1.toFixed(2)}–${o.q3.toFixed(2)}</td><td>${pctr(o.on_band)}</td></tr></tbody>`;
+  const pr = Bu.pairs || [];
+  $("capBt").innerHTML = pr.length ? `<b>Portability.</b> The posterior ratio between the burst factors of any two models lies within ${pct(d3.max(pr, p => Math.max(Math.abs(Math.log(p.ci95[0])), Math.abs(Math.log(p.ci95[1])))), 1).replace("+", "")} of one (95 % CrI), and the probability that they are equivalent within ±10 % is at least ${pctr(d3.min(pr, p => p.p_equiv))}. For SCALE, a plan with sustainable rate s can be granted bursts of about ${o.median.toFixed(1)}·s over 2-minute windows.` : "";
+}
+const col_ = m => col(m);
+
+/* ---------- Fig 8: token bucket ---------- */
+function figTb() {
+  if (!R.tb) { $("tb-section").hidden = true; return; }
+  const T = R.tb, W = T.window_min;
+  const calc = () => {
+    const s = Math.max(0, +$("tb-s").value || 0), rho = Math.max(1, +$("tb-rho").value || 1);
+    const B = $("tb-safe").checked ? T.B_safe : T.B;
+    const phi = Math.max(0, Math.min(1, (B / rho - 1) / (B - 1)));
+    const cells = [
+      [`${B.toFixed(2)}`, "burst factor used"],
+      [`${fmtN(B * s)} /min`, `burst rate allowed for ${W} min`],
+      [`${fmtN((B - 1) * s * W)}`, `bucket depth b (≈ ${((B - 1) * W).toFixed(1)} min of refill)`],
+      [pctr(phi), `of the allocation may burst at once (ρ = ${rho.toFixed(2)})`],
+    ];
+    $("tb-out").innerHTML = cells.map(([b, t]) => `<div class="stat"><b class="num">${b}</b><span>${t}</span></div>`).join("");
+  };
+  ["tb-s", "tb-rho", "tb-safe"].forEach(id => $(id).addEventListener("input", calc));
+  calc();
+  const pm = T.per_model;
+  $("capTb").innerHTML = `<b>Calculator.</b> Typical B = ${T.B.toFixed(2)} (median over the request classes), conservative B<sub>safe</sub> = ${T.B_safe.toFixed(2)} (covers 90 % of the classes). Throttling thresholds Θ = B·SK<sub>max</sub>: ${MODELS.map(m => `${m} ${fmtN(pm[m].throttle)} units/min`).join(", ")}.`;
+
+  const {svg, W: Wd, H} = svgIn("figTb", 280);
+  const m = {l: 48, r: 14, t: 12, b: 40};
+  const x = d3.scaleLinear().domain([0, 1]).range([m.l, Wd - m.r]), y = d3.scaleLinear().domain([0.9, 3.6]).range([H - m.b, m.t]);
+  gridY(svg, y, m.l, Wd - m.r, [1, 1.5, 2, 2.5, 3, 3.5]);
+  const cv = T.curve;
+  svg.append("path").attr("d", d3.area().x(d => x(d.phi)).y0(d => y(Math.max(0.9, d.rho_max_lo))).y1(d => y(Math.min(3.6, d.rho_max_hi)))(cv)).attr("fill", css("--band-2"));
+  svg.append("path").attr("d", d3.line().x(d => x(d.phi)).y(d => y(Math.min(3.6, d.rho_max)))(cv)).attr("fill", "none").attr("stroke", css("--accent")).attr("stroke-width", 2);
+  svg.append("path").attr("d", d3.line().x(d => x(d.phi)).y(d => y(Math.min(3.6, d.rho_max_safe)))(cv)).attr("fill", "none").attr("stroke", css("--accent")).attr("stroke-width", 1.2).attr("stroke-dasharray", "4 3");
+  svg.append("line").attr("x1", m.l).attr("x2", Wd - m.r).attr("y1", y(T.paper_rho)).attr("y2", y(T.paper_rho)).attr("stroke", css("--s2")).attr("stroke-dasharray", "2 3");
+  svg.append("circle").attr("cx", x(T.phi_max)).attr("cy", y(T.paper_rho)).attr("r", 5).attr("fill", css("--s2")).attr("stroke", css("--surface")).attr("stroke-width", 1.5);
+  label(svg, x(T.phi_max) + 8, y(T.paper_rho) - 8, `ρ = ${T.paper_rho}: φ ≤ ${pctr(T.phi_max)}`, {c: "--ink", s: 11});
+  label(svg, Wd - m.r - 4, m.t + 12, "burst-safe region below the curve", {a: "end", c: "--muted", s: 10.5});
+  const ax = svg.append("g").attr("transform", `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(5).tickFormat(v => Math.round(100 * v) + " %").tickSizeOuter(0)); axisStyle(ax);
+  const ay = svg.append("g").attr("transform", `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(6).tickSizeOuter(0)); axisStyle(ay);
+  label(svg, (m.l + Wd - m.r) / 2, H - 8, "share of the allocation bursting at once (φ)", {a: "middle", c: "--muted", s: 10.5});
+  svg.append("text").attr("transform", `translate(13,${(m.t + H - m.b) / 2}) rotate(-90)`).attr("text-anchor", "middle").attr("fill", css("--muted")).style("font", "11px " + css("--f-body")).text("max. burst-safe ρ");
+  $("capTb2").innerHTML = `<b>Burst-safe oversubscription (Rule 3).</b> Solid: B = ${T.B.toFixed(2)}; dashed: B<sub>safe</sub>; band: B ± 15 %. If at most half of the allocation bursts at once, ρ can reach ${T.rho_max_half.toFixed(2)}; if a quarter does, ${T.rho_max_quarter.toFixed(2)}.`;
+
+  const head = ["Plan", "ρ", "Quota (req/30 min)", "Sustained s (req/min)", "Burst from B (req/2 min)", "Bucket depth b (req)", "Paper's Table 3 burst (req/2 min)"];
+  $("tbplans").innerHTML = `<thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>` + T.plans.map(p => `<tr><td>${p.plan}</td><td>${p.rho.toFixed(1)}</td><td>${p.quota_30m.toFixed(0)}</td><td>${p.s_per_min.toFixed(2)}</td><td>${p.burst_per_2m.toFixed(0)}</td><td>${p.depth.toFixed(0)}</td><td>${p.paper_burst_per_2m}</td></tr>`).join("") + "</tbody>";
+}
+function drawAll() { fig1(); fig2a(); fig2b(); fig3(); fig4(); fig5(); fig6(); fig7(); figBurst(); figTb(); }
 function boot() {
   if (!R || !window.d3) { document.querySelector(".wrap").insertAdjacentHTML("afterbegin", "<p>Chart data or library failed to load.</p>"); return; }
-  text(); modelLegend("legend1"); modelLegend("legend4"); modelLegend("legend5"); tables(); mtable(); drawAll();
+  text(); modelLegend("legend1"); modelLegend("legend4"); modelLegend("legend5"); tables(); mtable(); stable(); drawAll();
   seg("law-", ["H", "G", "A"], k => { LAW = k; fig1(); });
   seg("tlaw-", ["H", "G", "A"], k => { TLAW = k; tables(); });
   let t; addEventListener("resize", () => { clearTimeout(t); t = setTimeout(drawAll, 150); });

@@ -1,0 +1,17 @@
+% Bias of mix capacity w.r.t. the harmonic prediction per model and MoST test.
+\begin{tabular}{llrccc}
+\toprule
+ & & & Frequentist & \multicolumn{2}{c}{Bayesian} \\
+\cmidrule(lr){4-4}\cmidrule(lr){5-6}
+Model & Test & Designs & Mean [95\,\% CI] & $\delta$ [90\,\% CrI] & $P(|\delta|<10\,\%)$ \\
+\midrule
+DeepSeek-R1-Distill-Qwen-7B & MIT & 23 & \ensuremath{-}7.8\,\% [\ensuremath{-}10.7\,\%, \ensuremath{-}4.9\,\%] & \ensuremath{-}8.8\,\% [\ensuremath{-}11.2\,\%, \ensuremath{-}6.4\,\%] & 57\,\% \\
+DeepSeek-R1-Distill-Qwen-7B & MST & 15 & \ensuremath{-}3.0\,\% [\ensuremath{-}12.5\,\%, +7.6\,\%] & \ensuremath{-}4.1\,\% [\ensuremath{-}10.2\,\%, +3.1\,\%] & 91\,\% \\
+Gemma-7B & MIT & 23 & +5.1\,\% [\ensuremath{-}1.2\,\%, +11.8\,\%] & \ensuremath{-}0.3\,\% [\ensuremath{-}3.7\,\%, +3.1\,\%] & 100\,\% \\
+Gemma-7B & MST & 19 & +8.7\,\% [\ensuremath{-}11.1\,\%, +32.9\,\%] & \ensuremath{-}4.6\,\% [\ensuremath{-}10.0\,\%, +2.0\,\%] & 91\,\% \\
+Llama-3.1-8B-Instruct & MIT & 16 & \ensuremath{-}6.8\,\% [\ensuremath{-}9.4\,\%, \ensuremath{-}4.1\,\%] & \ensuremath{-}7.0\,\% [\ensuremath{-}9.6\,\%, \ensuremath{-}4.4\,\%] & 91\,\% \\
+Llama-3.1-8B-Instruct & MST & 18 & \ensuremath{-}14.4\,\% [\ensuremath{-}21.7\,\%, \ensuremath{-}6.3\,\%] & \ensuremath{-}7.8\,\% [\ensuremath{-}14.2\,\%, \ensuremath{-}2.4\,\%] & 64\,\% \\
+\midrule
+All & both & 114 & \ensuremath{-}3.0\,\% [\ensuremath{-}6.9\,\%, +1.0\,\%] & \ensuremath{-}5.5\,\% [\ensuremath{-}9.9\,\%, \ensuremath{-}1.0\,\%] & 92\,\% \\
+\bottomrule
+\end{tabular}

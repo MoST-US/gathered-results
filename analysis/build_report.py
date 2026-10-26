@@ -29,7 +29,9 @@ def main(out_dir, html_path):
             rH=round(b["rH"], 4), rH_lo=round(b["rH_ci"][0], 4), rH_hi=round(b["rH_ci"][1], 4),
             fH=round(r.r_H, 4), fG=round(r.r_G, 4), fA=round(r.r_A, 4),
             p_rope=round(b["p_rope"], 3), p_minmax=round(b["p_minmax"], 3), p_HA=round(b["p_HA"], 3),
-            pos=round(float((np.log(r.c_obs) - np.log(r.H)) / (np.log(r.A) - np.log(r.H))), 3),
+            # position inside the harmonic-arithmetic envelope (0 for one-component mixes, where H = A)
+            pos=round(float((np.log(r.c_obs) - np.log(r.H)) / (np.log(r.A) - np.log(r.H))), 3)
+            if r.A > r.H * (1 + 1e-9) else 0.0,
         ))
 
     def iv(x):
@@ -52,6 +54,7 @@ def main(out_dir, html_path):
                          p_h=freq["q_profile"]["p_q_minus1"])),
         sd={law: dict(rep={k: iv(v) for k, v in bayes[law]["sd_rep"].items()},
                       mix={k: iv(v) for k, v in bayes[law]["sd_mix"].items()},
+                      run={k: iv(v) for k, v in bayes[law]["sd_run"].items()},
                       s={k: iv(v) for k, v in bayes[law]["s"].items()})
             for law in ["harmonic", "geometric", "arithmetic", "free"]},
         delta0={law: iv(bayes[law]["delta0"]) for law in ["harmonic", "geometric", "arithmetic", "free"]},
@@ -67,6 +70,43 @@ def main(out_dir, html_path):
                   hv_a=freq["H_vs_A_wilcoxon_p"], hv_g=freq["H_vs_G_wilcoxon_p"],
                   h_better=freq["H_better_share"], non_monotone=res["non_monotone_pure"]),
     )
+    # sensitivity: mixes with / without the heaviest cell (long prompt + long answer)
+    fm["heavy"] = fm.label.str.contains("600-1000_1000-1500")
+    sens = []
+    for (k, h), g in fm.groupby(["kind", "heavy"]):
+        sens.append(dict(kind=k, heavy=bool(h), n=len(g), mean=float(g.r_H.mean()), sd=float(g.r_H.std()),
+                         within10=float(np.mean(np.abs(g.r_H) < np.log(1.1)))))
+    sens_model = []
+    for (mo, k, h), g in fm.groupby(["model", "kind", "heavy"]):
+        sens_model.append(dict(model=mo, kind=k, heavy=bool(h), n=len(g), mean=float(g.r_H.mean())))
+    data["sens"] = sens
+    data["sens_model"] = sens_model
+    data["mix_rep"] = freq.get("mix_replicates", {})
+    data["family_kind"] = freq["drivers"].get("family_kind", [])
+    data["meta"]["dups"] = res.get("duplicate_units_removed", 0)
+    data["meta"]["design_units"] = freq.get("n_design_units")
+    data["meta"]["repeated_runs"] = int(sum(v["runs"] for v in freq.get("mix_replicates", {}).values()))
+    data["meta"]["repeated_designs"] = int(sum(v["designs"] for v in freq.get("mix_replicates", {}).values()))
+    data["bounds_out"] = [dict(model=r.model, kind=r.kind, label=r.label, ratio=float(r.c_obs / r.cmin))
+                          for _, r in fm[~fm.in_minmax].iterrows()]
+    bu, bb = res.get("burst"), res.get("burst_bayes")
+    if bu:
+        bcells = {(c["model"], c["cell"]): c for c in (bb or {}).get("cells", [])}
+        data["burst"] = dict(
+            cells=[dict(model=c["model"], inp=c["inp"], out=c["out"], B=round(c["B"], 3), mit=round(c["mit"], 1),
+                        mst=round(c["mst"], 1), dev=round(c["dev"], 4),
+                        lo=round(bcells[(c["model"], c["cell"])]["ci95"][0], 3) if bcells else None,
+                        hi=round(bcells[(c["model"], c["cell"])]["ci95"][1], 3) if bcells else None)
+                   for c in bu["cells"]],
+            per_model={m: dict(freq=v, bayes=(bb or {}).get("per_model", {}).get(m)) for m, v in bu["per_model"].items()},
+            overall=bu["overall"], anova=bu["anova"], anova_robust=bu["anova_robust"],
+            short=bu["short_output"], pairs=(bb or {}).get("pairs", []),
+            mixes=dict({k: v for k, v in bu["mixes"].items() if k != "rows"},
+                       rows=[dict(model=r["model"], label=r["label"], obs=float(np.exp(r["logB_obs"])),
+                                  pred=float(np.exp(r["logB_pred"])), heavy=bool(r["heavy"]))
+                             for r in bu["mixes"]["rows"]]))
+    if res.get("token_bucket"):
+        data["tb"] = res["token_bucket"]
     tpl = (HERE / "report_template.html").read_text(encoding="utf-8")
     html = tpl.replace("/*__DATA__*/null", json.dumps(data, separators=(",", ":"), default=float))
     Path(html_path).write_text(html, encoding="utf-8")
