@@ -113,7 +113,23 @@ placeholder for the operational-analysis reference.
    recompute the frequentist or the full analysis before deploying; the recomputed outputs are also
    attached to the run as a downloadable artifact.
 
-**Zenodo.** Everything needed is in the repository and every page works from `file://`. Either
-enable the repository in Zenodo's GitHub integration and publish a GitHub release (Zenodo archives
-the release and reads `.zenodo.json`), or upload a zip of the repository manually. Citation
-metadata is in `CITATION.cff`.
+**Zenodo.** Every page works from `file://`, so an archive of the repository is a complete
+artifact. Note that the repository tracks about 20 GB of request-level files
+(`MIT_MST_results/**/results_from_json.csv`); the analysis only needs the 1 KB `results.csv`
+summaries. Two options:
+
+1. *GitHub integration*: enable the repository in Zenodo and publish a GitHub release; Zenodo
+   archives the release and reads `.zenodo.json`. With ~20 GB of tracked data the release archive is
+   large and may be slow or fail to transfer.
+2. *Manual upload (recommended)*: upload two files to one Zenodo record, a small archive with the
+   code, `docs/`, `analysis/` and the `results.csv` summaries (enough to reproduce everything), and
+   a separate archive with the request-level `results_from_json.csv` files. For example:
+
+   ```bash
+   git ls-files | grep -v results_from_json.csv | zip -@ scale-artifact.zip
+   git ls-files | grep results_from_json.csv | zip -@ scale-request-level-data.zip
+   ```
+
+Citation metadata is in `CITATION.cff`. Keep the deposit anonymous while the paper is under
+double-blind review (Zenodo allows restricted or anonymous records; complete the authors and the
+licence for the camera-ready version).
