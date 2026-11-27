@@ -50,6 +50,7 @@ analysis/
 ├── run_all.py                  # one command: analysis -> LaTeX assets -> site
 ├── additivity_analysis.py      # data loading, frequentist and Bayesian additivity analysis
 ├── burst_analysis.py           # burst factor B = MIT/MST (frequentist and Bayesian)
+├── taas_rq_analysis.py         # TAAS article: RQ1 repeatability, RQ2 transfer, RQ3 request-count baseline
 ├── latex_export.py             # macros, tables, figures, draft section for the paper
 ├── build_report.py             # statistical report (HTML, interactive)
 ├── build_animations.py         # didactic animations (HTML, English and Spanish)
@@ -75,6 +76,7 @@ python -m pip install -r analysis/requirements.txt
 python analysis/run_all.py                # full pipeline, ~15-30 min on 4 cores
 python analysis/run_all.py --skip-bayes   # frequentist part only, a few minutes
 python analysis/run_all.py --reuse        # rebuild LaTeX assets and site from analysis/output
+python analysis/taas_rq_analysis.py       # TAAS RQ1/RQ2 tables and request-count baseline -> analysis/output/taas/ (needs mix_frequentist.csv)
 ```
 
 On Windows, create the virtual environment in a short path (for example `C:\venvs\scale`): pip fails
